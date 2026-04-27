@@ -24,13 +24,54 @@
 
     <!-- The React Application -->
     <script type="text/babel" data-type="module">
-        import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
+        import React, { useState, useEffect, useMemo } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
-        import { Play, Search, Film, Tv, ExternalLink, Database, Image as ImageIcon, ChevronDown, ChevronUp, Clock, CheckCircle2, Calendar, Settings, Key, Info, Heart, History, Trash2, X } from 'https://esm.sh/lucide-react@0.292.0';
+        import { Play, Search, Film, Tv, ExternalLink, Database, Image as ImageIcon, ChevronDown, ChevronUp, Clock, CheckCircle2, Calendar, Settings, Key, Info, Heart, History, Trash2, X, Server } from 'https://esm.sh/lucide-react@0.292.0';
+
+        // Server Configurations
+        const SERVERS = [
+          {
+            id: 'vaplayer',
+            name: 'VAPlayer',
+            getUrl: (type, imdbId, s, e) => {
+              let url = `https://vaplayer.ru/embed/${type}/${imdbId}`;
+              if (type === 'tv' && s && e) url += `?s=${s}&e=${e}`;
+              return url;
+            }
+          },
+          {
+            id: 'vidsrc',
+            name: 'VidSrc',
+            getUrl: (type, imdbId, s, e) => {
+              let url = `https://vidsrc.me/embed/${type}?imdb=${imdbId}`;
+              if (type === 'tv' && s && e) url += `&season=${s}&episode=${e}`;
+              return url;
+            }
+          },
+          {
+            id: 'vidsrcpro',
+            name: 'VidSrc Pro',
+            getUrl: (type, imdbId, s, e) => {
+              let url = `https://vidsrc.cc/v2/embed/${type}/${imdbId}`;
+              if (type === 'tv' && s && e) url += `/${s}/${e}`;
+              return url;
+            }
+          },
+          {
+            id: 'embedsu',
+            name: 'EmbedSU',
+            getUrl: (type, imdbId, s, e) => {
+              let url = `https://embed.su/embed/${type}/${imdbId}`;
+              if (type === 'tv' && s && e) url += `/${s}/${e}`;
+              return url;
+            }
+          }
+        ];
 
         function App() {
           // Local Storage Initializers
           const [apiKey, setApiKey] = useState(() => localStorage.getItem('omdbApiKey') || '46fbc5e7');
+          const [selectedServerId, setSelectedServerId] = useState(() => localStorage.getItem('vaServer') || 'vaplayer');
           const [favorites, setFavorites] = useState(() => {
             try { return JSON.parse(localStorage.getItem('vaFavorites')) || []; } catch(e) { return []; }
           });
@@ -47,7 +88,7 @@
           const [error, setError] = useState('');
           
           // Player State
-          const [activeUrl, setActiveUrl] = useState('');
+          const [activeMedia, setActiveMedia] = useState(null);
 
           // TV Show Episode State
           const [expandedShow, setExpandedShow] = useState(null);
@@ -63,6 +104,7 @@
           // Persistence Effects
           useEffect(() => localStorage.setItem('vaFavorites', JSON.stringify(favorites)), [favorites]);
           useEffect(() => localStorage.setItem('vaHistory', JSON.stringify(historyList)), [historyList]);
+          useEffect(() => localStorage.setItem('vaServer', selectedServerId), [selectedServerId]);
 
           const handleApiKeyChange = (e) => {
             const newKey = e.target.value;
@@ -207,13 +249,14 @@
           // Play Media & History Handler
           const playMedia = (item, season = null, episode = null, epTitle = null) => {
             const mediaType = item.Type === 'series' || item.Type === 'tv' ? 'tv' : 'movie';
-            let url = `https://vaplayer.ru/embed/${mediaType}/${item.imdbID}`;
             
-            if (season && episode) {
-              url += `?s=${season}&e=${episode}`; 
-            }
+            setActiveMedia({
+              imdbID: item.imdbID,
+              type: mediaType,
+              season,
+              episode
+            });
             
-            setActiveUrl(url);
             window.scrollTo({ top: 0, behavior: 'smooth' });
 
             // Record History
@@ -234,6 +277,13 @@
               return [newRecord, ...filtered].slice(0, 100); // Keep last 100 entries
             });
           };
+
+          // Derived Player URL based on selected server
+          const activeUrl = useMemo(() => {
+            if (!activeMedia) return '';
+            const server = SERVERS.find(s => s.id === selectedServerId) || SERVERS[0];
+            return server.getUrl(activeMedia.type, activeMedia.imdbID, activeMedia.season, activeMedia.episode);
+          }, [activeMedia, selectedServerId]);
 
           // Determine which array to render for the grid view
           const displayItems = activeTab === 'favorites' ? favorites : results;
@@ -287,6 +337,25 @@
 
                 {/* --- Unified Player Section --- */}
                 <div className="flex flex-col gap-2">
+                  
+                  {/* Server Selector */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-900 border border-slate-800 p-2 sm:px-4 sm:py-2.5 rounded-xl gap-3 sm:gap-4 shadow-lg">
+                    <span className="text-xs sm:text-sm font-bold text-slate-400 flex items-center gap-2 uppercase tracking-wider">
+                      <Server size={14} className="text-indigo-500" /> Source
+                    </span>
+                    <div className="flex gap-2 overflow-x-auto custom-scrollbar w-full sm:w-auto pb-1 sm:pb-0">
+                      {SERVERS.map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => setSelectedServerId(s.id)}
+                          className={`px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-lg whitespace-nowrap transition-colors flex-1 sm:flex-none ${selectedServerId === s.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="relative w-full bg-black aspect-video flex items-center justify-center rounded-2xl overflow-hidden shadow-2xl border border-slate-800 transition-all">
                     {activeUrl ? (
                       <iframe

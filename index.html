@@ -8,6 +8,8 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- NEW: Added HLS.js for native IPTV playback -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -126,18 +128,16 @@
                 const baseUrl = `${cleanDomain}/player_api.php?username=${iptvUser}&password=${iptvPass}`;
 
                 const fetchIptvData = async (targetUrl) => {
-                    const isSecureEnv = window.location.protocol === 'https:';
-                    const isHttpTarget = targetUrl.startsWith('http://');
-                    
-                    // Direct fetch (Will fail in Canvas if HTTP)
-                    if (!isSecureEnv || !isHttpTarget) {
-                        try {
-                            const res = await fetch(targetUrl);
-                            if (res.ok) return await res.json();
-                        } catch(e) {}
+                    // ALWAYS try direct fetch first. Public proxies will crash on large IPTV databases (50MB+),
+                    // so the direct connection is heavily preferred and required for the main database.
+                    try {
+                        const res = await fetch(targetUrl, { mode: 'cors', headers: { 'Accept': 'application/json' } });
+                        if (res.ok) return await res.json();
+                    } catch(e) {
+                        console.log("Direct fetch failed, attempting proxies for fallback...", e);
                     }
 
-                    // Proxies (Will fail if IPTV provider blocks proxy IPs)
+                    // Proxies fallback (will likely fail for get_vod_streams due to payload size limits, but good for small requests)
                     const proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?'];
                     for (const proxy of proxies) {
                         try {
@@ -146,7 +146,13 @@
                             if (res.ok) return await res.json();
                         } catch (e) { continue; }
                     }
-                    throw new Error(isSecureEnv && isHttpTarget ? 'Canvas Blocked HTTP Request' : 'All connections failed');
+                    
+                    const isSecureEnv = window.location.protocol === 'https:';
+                    const isHttpTarget = targetUrl.startsWith('http://');
+                    if (isSecureEnv && isHttpTarget) {
+                        throw new Error('HTTPS block');
+                    }
+                    throw new Error('All connections failed');
                 };
 
                 Promise.all([
@@ -165,9 +171,9 @@
                 })
                 .catch(err => {
                     if (isMounted) {
-                        const errMsg = err.message === 'Canvas Blocked HTTP Request' 
-                            ? "Canvas blocks HTTP IPTV. Please save file locally to test." 
-                            : "Failed to load database. Provider may be blocking proxy.";
+                        const errMsg = err.message === 'HTTPS block' 
+                            ? "HTTPS Website vs HTTP IPTV Blocked. Run locally or use a CORS extension." 
+                            : "Failed to connect to IPTV. Provider blocking direct access.";
                         setIptvCache({ vod: [], series: [], loaded: false, error: errMsg });
                     }
                 });
@@ -518,9 +524,12 @@
                 const [showSettings, setShowSettings] = useState(false);
                 const [showCastGuide, setShowCastGuide] = useState(false);
                 const [copied, setCopied] = useState(false);
+                
                 const [iptvStreamId, setIptvStreamId] = useState('');
                 const [autoSearchStatus, setAutoSearchStatus] = useState('idle'); 
                 const [streamStatus, setStreamStatus] = useState('checking'); 
+                
+                const videoRef = useRef(null);
 
                 if (!activePlayerMedia) return null;
 
@@ -544,7 +553,8 @@
                         const match = iptvCache.vod.find(item => normalize(item.name) === targetName) || 
                                       iptvCache.vod.find(item => normalize(item.name).includes(targetName));
                         if (match) {
-                            setIptvStreamId(match.stream_id);
+                            const ext = match.container_extension || 'mp4';
+                            setIptvStreamId(`${match.stream_id}.${ext}`);
                             setAutoSearchStatus('found');
                         } else {
                             setAutoSearchStatus('not_found');
@@ -564,7 +574,8 @@
                                     for (const proxy of proxies) {
                                         try {
                                             const fetchUrl = proxy ? `${proxy}${encodeURIComponent(url)}` : url;
-                                            const res = await fetch(fetchUrl, { cache: 'no-store' });
+                                            const fetchOptions = proxy ? { cache: 'no-store' } : { mode: 'cors', headers: { 'Accept': 'application/json' } };
+                                            const res = await fetch(fetchUrl, fetchOptions);
                                             if (res.ok) { data = await res.json(); break; }
                                         } catch (e) { continue; }
                                     }
@@ -574,7 +585,8 @@
                                     if (seasonData && Array.isArray(seasonData)) {
                                         const ep = seasonData.find(e => parseInt(e.episode_num) === parseInt(activePlayerMedia.episode));
                                         if (ep && ep.id) {
-                                            setIptvStreamId(ep.id);
+                                            const ext = ep.container_extension || 'mp4';
+                                            setIptvStreamId(`${ep.id}.${ext}`);
                                             setAutoSearchStatus('found');
                                             return;
                                         }
@@ -597,14 +609,19 @@
                         if (!iptvStreamId || !iptvDomain || !iptvUser || !iptvPass) return '';
                         const typePath = activePlayerMedia.type === 'tv' ? 'series' : 'movie';
                         const cleanDomain = iptvDomain.replace(/\/$/, '');
-                        return `${cleanDomain}/${typePath}/${iptvUser}/${iptvPass}/${iptvStreamId}.mp4`;
+                        
+                        // Default to .mp4 if manual input doesn't include an extension
+                        let streamPath = String(iptvStreamId);
+                        if (!streamPath.includes('.')) streamPath += '.mp4';
+                        
+                        return `${cleanDomain}/${typePath}/${iptvUser}/${iptvPass}/${streamPath}`;
                     }
                     
                     const server = SERVERS.find(s => s.id === selectedServerId) || SERVERS[0];
                     return server.getUrl(activePlayerMedia.type, activePlayerMedia.tmdbId, activePlayerMedia.imdbId, activePlayerMedia.season, activePlayerMedia.episode);
                 }, [activePlayerMedia, selectedServerId, isIptv, iptvStreamId, iptvDomain, iptvUser, iptvPass]);
 
-                // Test Channel using user's no-cors snippet
+                // Test Channel using no-cors snippet
                 const testChannel = async (url) => {
                     if (!url) return false;
                     try {
@@ -626,9 +643,52 @@
                             setStreamStatus(isOnline ? 'online' : 'offline');
                         });
                     } else if (activeUrl && !isIptv) {
-                        setStreamStatus('online'); // Global embedded servers handle their own errors
+                        setStreamStatus('online'); 
                     }
                 }, [activeUrl, isIptv, iptvStreamId]);
+
+                // NEW: Native HTML5 / HLS.js Video Player Hook
+                useEffect(() => {
+                    if (!activeUrl || !isIptv || streamStatus !== 'online') return;
+                    
+                    const video = videoRef.current;
+                    if (!video) return;
+
+                    let hlsInstance = null;
+
+                    if (activeUrl.includes('.m3u8') || activeUrl.includes('m3u8')) {
+                        if (window.Hls && window.Hls.isSupported()) {
+                            hlsInstance = new window.Hls({
+                                enableWorker: true,
+                                lowLatencyMode: true,
+                                backBufferLength: 90
+                            });
+                            hlsInstance.loadSource(activeUrl);
+                            hlsInstance.attachMedia(video);
+                            hlsInstance.on(window.Hls.Events.MANIFEST_PARSED, () => {
+                                video.play().catch(e => console.error('Play error:', e));
+                            });
+                        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                            video.src = activeUrl;
+                            video.play().catch(e => console.error('Play error:', e));
+                        }
+                    } else {
+                        // Direct playback for .mp4 / .mkv
+                        video.src = activeUrl;
+                        video.play().catch(e => console.error('Play error:', e));
+                    }
+
+                    return () => {
+                        if (hlsInstance) {
+                            hlsInstance.destroy();
+                        }
+                        if (video) {
+                            video.pause();
+                            video.removeAttribute('src');
+                            video.load();
+                        }
+                    };
+                }, [activeUrl, isIptv, streamStatus]);
 
                 const handleCopyUrl = () => {
                     if (!activeUrl) return;
@@ -723,7 +783,7 @@
                                     <div className="flex flex-col gap-3 w-full max-w-xs">
                                         <input 
                                             type="text" 
-                                            placeholder="Stream ID (e.g., 12345)" 
+                                            placeholder="Stream ID (e.g. 12345.mp4)" 
                                             value={iptvStreamId} 
                                             onChange={e => setIptvStreamId(e.target.value)} 
                                             className="bg-neutral-800 border border-neutral-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500 text-center font-mono" 
@@ -751,7 +811,18 @@
                                             </a>
                                         </div>
                                     )}
-                                    <iframe src={activeUrl} className={`absolute inset-0 w-full h-full border-0 ${streamStatus === 'online' ? 'opacity-100' : 'opacity-0'}`} allowFullScreen allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>
+                                    
+                                    {/* NATIVE VIDEO OR IFRAME SWAP */}
+                                    {isIptv ? (
+                                        <video 
+                                            ref={videoRef}
+                                            className={`absolute inset-0 w-full h-full bg-black ${streamStatus === 'online' ? 'opacity-100' : 'opacity-0'}`} 
+                                            controls 
+                                            autoPlay
+                                        />
+                                    ) : (
+                                        <iframe src={activeUrl} className={`absolute inset-0 w-full h-full border-0 ${streamStatus === 'online' ? 'opacity-100' : 'opacity-0'}`} allowFullScreen allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>
+                                    )}
                                 </div>
                             )}
 
@@ -892,16 +963,13 @@
                         const url = `${cleanDomain}/player_api.php?username=${iptvUser}&password=${iptvPass}`;
                         
                         const fetchWithProxy = async () => {
-                            const isSecureEnv = window.location.protocol === 'https:';
-                            const isHttpTarget = url.startsWith('http://');
-                            
-                            if (!isSecureEnv || !isHttpTarget) {
-                                try {
-                                    const res = await fetch(url);
-                                    if (res.ok) return await res.json();
-                                } catch(e) {}
-                            }
+                            // Try direct connection first
+                            try {
+                                const res = await fetch(url, { mode: 'cors', headers: { 'Accept': 'application/json' } });
+                                if (res.ok) return await res.json();
+                            } catch(e) {}
 
+                            // Fallback to proxies
                             const proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?'];
                             for (const proxy of proxies) {
                                 try {
@@ -922,7 +990,7 @@
                         }
                     } catch(e) {
                         const errMsg = window.location.protocol === 'https:' && iptvDomain.startsWith('http://')
-                            ? '❌ Canvas blocks HTTP requests. Please save as a local HTML file.'
+                            ? '❌ HTTPS blocking HTTP. Please use a CORS extension or run locally.'
                             : '❌ Network/CORS Error. Ensure domain is correct.';
                         setTestState({ loading: false, result: errMsg, isError: true });
                     }

@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- This meta tag hides your website URL from the streaming servers so they don't block the video -->
     <meta name="referrer" content="no-referrer">
     <title>Universal Index Player</title>
     
@@ -20,17 +19,11 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* Hide scrollbars for horizontal rows */
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
 
-        .hero-gradient {
-            background: linear-gradient(to top, #0f0f0f 0%, rgba(15,15,15,0.8) 20%, transparent 60%);
-        }
-        
-        .modal-gradient {
-            background: linear-gradient(to top, #171717 0%, #171717 80%, transparent 100%);
-        }
+        .hero-gradient { background: linear-gradient(to top, #0f0f0f 0%, rgba(15,15,15,0.8) 20%, transparent 60%); }
+        .modal-gradient { background: linear-gradient(to top, #171717 0%, #171717 80%, transparent 100%); }
 
         img { transition: opacity 0.3s ease-in-out; }
     </style>
@@ -41,25 +34,17 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useMemo, useRef } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
-        import { Play, Search, Film, Tv, Settings, Heart, History, Trash2, X, Server, ChevronDown, ChevronRight, PlayCircle, AlertCircle, Globe, Star, Cast, Info, Plus, Check, MonitorPlay, Home, Copy, CheckCheck, ArrowLeft, ExternalLink } from 'https://esm.sh/lucide-react@0.292.0';
+        import { Play, Search, Film, Tv, Settings, Heart, History, Trash2, X, Server, ChevronDown, ChevronRight, PlayCircle, AlertCircle, Globe, Star, Cast, Info, Plus, Check, MonitorPlay, Home, Copy, CheckCheck, ArrowLeft, ExternalLink, KeySquare, Database } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- Configurations ---
         const SERVERS = [
-          { 
-            id: 'streamimdb', 
-            name: 'StreamIMDb', 
-            getUrl: (t, tmdb, imdb, s, e) => `https://streamimdb.me/embed/${t}/${imdb || tmdb}${t==='tv'&&s&&e?`/${s}/${e}`:''}` 
-          },
-          { 
-            id: 'vaplayer', 
-            name: 'VAPlayer', 
-            // VAPlayer relies strongly on IMDb IDs. Fallback to TMDB only if IMDb is completely missing.
-            getUrl: (t, tmdb, imdb, s, e) => `https://vaplayer.ru/embed/${t}/${imdb || tmdb}${t==='tv'&&s&&e?`?s=${s}&e=${e}`:''}` 
-          },
+          { id: 'streamimdb', name: 'StreamIMDb', getUrl: (t, tmdb, imdb, s, e) => `https://streamimdb.me/embed/${t}/${imdb || tmdb}${t==='tv'&&s&&e?`/${s}/${e}`:''}` },
+          { id: 'vaplayer', name: 'VAPlayer', getUrl: (t, tmdb, imdb, s, e) => `https://vaplayer.ru/embed/${t}/${imdb || tmdb}${t==='tv'&&s&&e?`?s=${s}&e=${e}`:''}` },
           { id: 'vidsrc', name: 'VidSrc', getUrl: (t, tmdb, imdb, s, e) => `https://vidsrc.me/embed/${t}?tmdb=${tmdb}${t==='tv'&&s&&e?`&season=${s}&episode=${e}`:''}` },
           { id: 'autoembed', name: 'AutoEmbed', getUrl: (t, tmdb, imdb, s, e) => `https://autoembed.to/${t}/tmdb/${tmdb}${t==='tv'&&s&&e?`-${s}-${e}`:''}` },
           { id: 'smashy', name: 'SmashyStream', getUrl: (t, tmdb, imdb, s, e) => `https://player.smashy.stream/${t}/${tmdb}${t==='tv'&&s&&e?`?s=${s}&e=${e}`:''}` },
-          { id: 'vidsrcpro', name: 'VidSrc Pro', getUrl: (t, tmdb, imdb, s, e) => `https://vidsrc.cc/v2/embed/${t}/${tmdb}${t==='tv'&&s&&e?`/${s}/${e}`:''}` }
+          { id: 'vidsrcpro', name: 'VidSrc Pro', getUrl: (t, tmdb, imdb, s, e) => `https://vidsrc.cc/v2/embed/${t}/${tmdb}${t==='tv'&&s&&e?`/${s}/${e}`:''}` },
+          { id: 'iptv', name: 'My IPTV Subscription', getUrl: () => '' }
         ];
 
         const ROW_CONFIGS = {
@@ -95,33 +80,100 @@
             ]
         };
 
-        // --- Helper Components ---
         const LoadingSpinner = () => (
             <div className="flex justify-center items-center py-10">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
             </div>
         );
 
-        // --- Main Application ---
         function App() {
             const [tmdbKey, setTmdbKey] = useState(() => localStorage.getItem('vaTmdbKey') || '15d2ea6d0dc1d476efbca3eba2b9bbfb');
-            // Ensure StreamIMDb is the default server source across the app
             const [selectedServerId, setSelectedServerId] = useState(() => localStorage.getItem('vaServer') || 'streamimdb');
             const [dbLanguage, setDbLanguage] = useState(() => localStorage.getItem('vaLanguage') || 'en-US');
             
+            // IPTV State
+            const [iptvDomain, setIptvDomain] = useState(() => localStorage.getItem('vaIptvDomain') || 'http://hydraa.st:80');
+            const [iptvUser, setIptvUser] = useState(() => localStorage.getItem('vaIptvUser') || 'haithemb');
+            const [iptvPass, setIptvPass] = useState(() => localStorage.getItem('vaIptvPass') || 'haithemb');
+
+            const [iptvCache, setIptvCache] = useState({ vod: [], series: [], loaded: false, error: null });
+
             const [favorites, setFavorites] = useState(() => { try { return JSON.parse(localStorage.getItem('vaFavorites')) || []; } catch(e) { return []; } });
             const [historyList, setHistoryList] = useState(() => { try { return JSON.parse(localStorage.getItem('vaHistory')) || []; } catch(e) { return []; } });
 
-            const [activeTab, setActiveTab] = useState('home'); // home, movies, tv, search, settings
-            const [seeAllConfig, setSeeAllConfig] = useState(null); // For "See All" grid view
-            const [selectedMedia, setSelectedMedia] = useState(null); // For Details Modal
-            const [activePlayerMedia, setActivePlayerMedia] = useState(null); // For Fullscreen Player
+            const [activeTab, setActiveTab] = useState('home'); 
+            const [seeAllConfig, setSeeAllConfig] = useState(null); 
+            const [selectedMedia, setSelectedMedia] = useState(null); 
+            const [activePlayerMedia, setActivePlayerMedia] = useState(null); 
 
             useEffect(() => localStorage.setItem('vaFavorites', JSON.stringify(favorites)), [favorites]);
             useEffect(() => localStorage.setItem('vaHistory', JSON.stringify(historyList)), [historyList]);
             useEffect(() => localStorage.setItem('vaServer', selectedServerId), [selectedServerId]);
             useEffect(() => localStorage.setItem('vaTmdbKey', tmdbKey), [tmdbKey]);
             useEffect(() => localStorage.setItem('vaLanguage', dbLanguage), [dbLanguage]);
+            useEffect(() => localStorage.setItem('vaIptvDomain', iptvDomain), [iptvDomain]);
+            useEffect(() => localStorage.setItem('vaIptvUser', iptvUser), [iptvUser]);
+            useEffect(() => localStorage.setItem('vaIptvPass', iptvPass), [iptvPass]);
+
+            // --- Background IPTV Fetcher ---
+            useEffect(() => {
+                if (!iptvDomain || !iptvUser || !iptvPass) return;
+                
+                let isMounted = true;
+                setIptvCache({ vod: [], series: [], loaded: false, error: null });
+
+                const cleanDomain = iptvDomain.replace(/\/$/, '');
+                const baseUrl = `${cleanDomain}/player_api.php?username=${iptvUser}&password=${iptvPass}`;
+
+                const fetchIptvData = async (targetUrl) => {
+                    const isSecureEnv = window.location.protocol === 'https:';
+                    const isHttpTarget = targetUrl.startsWith('http://');
+                    
+                    // Direct fetch (Will fail in Canvas if HTTP)
+                    if (!isSecureEnv || !isHttpTarget) {
+                        try {
+                            const res = await fetch(targetUrl);
+                            if (res.ok) return await res.json();
+                        } catch(e) {}
+                    }
+
+                    // Proxies (Will fail if IPTV provider blocks proxy IPs)
+                    const proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?'];
+                    for (const proxy of proxies) {
+                        try {
+                            const fetchUrl = `${proxy}${encodeURIComponent(targetUrl)}`;
+                            const res = await fetch(fetchUrl, { cache: 'no-store' });
+                            if (res.ok) return await res.json();
+                        } catch (e) { continue; }
+                    }
+                    throw new Error(isSecureEnv && isHttpTarget ? 'Canvas Blocked HTTP Request' : 'All connections failed');
+                };
+
+                Promise.all([
+                    fetchIptvData(`${baseUrl}&action=get_vod_streams`),
+                    fetchIptvData(`${baseUrl}&action=get_series`)
+                ])
+                .then(([vodData, seriesData]) => {
+                    if (isMounted) {
+                        setIptvCache({
+                            vod: Array.isArray(vodData) ? vodData : [],
+                            series: Array.isArray(seriesData) ? seriesData : [],
+                            loaded: true,
+                            error: null
+                        });
+                    }
+                })
+                .catch(err => {
+                    if (isMounted) {
+                        const errMsg = err.message === 'Canvas Blocked HTTP Request' 
+                            ? "Canvas blocks HTTP IPTV. Please save file locally to test." 
+                            : "Failed to load database. Provider may be blocking proxy.";
+                        setIptvCache({ vod: [], series: [], loaded: false, error: errMsg });
+                    }
+                });
+
+                return () => { isMounted = false; };
+            }, [iptvDomain, iptvUser, iptvPass]);
 
             const isRTL = dbLanguage === 'ar';
 
@@ -142,7 +194,6 @@
                     originalLanguage: item.original_language || item.OriginalLanguage
                 });
 
-                // Record History
                 const histId = `${item.id}-${season || '0'}-${episode || '0'}`;
                 const newRecord = {
                     historyId: histId, id: item.id, imdbID: item.imdbID || item.external_ids?.imdb_id,
@@ -167,7 +218,7 @@
                 });
             };
 
-            // --- Row Component ---
+            // --- Media Row Component ---
             const MediaRow = ({ title, url, items, onSeeAll }) => {
                 const [rowItems, setRowItems] = useState(items || []);
                 const [loading, setLoading] = useState(!items);
@@ -190,7 +241,7 @@
                     <div className="mb-6">
                         <div className="flex justify-between items-end px-4 mb-2">
                             <h2 className="text-base font-bold text-white tracking-wide">{title}</h2>
-                            <span onClick={() => onSeeAll && onSeeAll({title, url})} className="text-xs text-red-500 font-semibold cursor-pointer hover:underline">See All</span>
+                            <span onClick={() => onSeeAll && onSeeAll({title, url})} className="text-xs text-indigo-400 font-semibold cursor-pointer hover:underline">See All</span>
                         </div>
                         <div className="flex overflow-x-auto gap-3 px-4 pb-2 hide-scrollbar snap-x">
                             {loading ? <div className="w-full flex gap-3">{[1,2,3,4,5].map(i => <div key={i} className="w-28 h-40 bg-[#1e1e1e] rounded-md flex-shrink-0 animate-pulse"></div>)}</div> : 
@@ -208,7 +259,6 @@
                 );
             };
 
-            // --- Continue Watching Row ---
             const ContinueWatchingRow = () => {
                 if (historyList.length === 0) return null;
                 return (
@@ -222,7 +272,7 @@
                                         <div className="absolute inset-0 flex items-center justify-center">
                                             <PlayCircle size={36} className="text-white shadow-xl opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all" />
                                         </div>
-                                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-700"><div className="h-full bg-red-600 w-2/3"></div></div>
+                                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-700"><div className="h-full bg-indigo-500 w-2/3"></div></div>
                                     </div>
                                     <div className="mt-1 flex justify-between items-start">
                                         <div className="flex flex-col">
@@ -238,7 +288,6 @@
                 );
             };
 
-            // --- See All Grid View ---
             const SeeAllView = ({ config, onBack }) => {
                 const [items, setItems] = useState([]);
                 const [page, setPage] = useState(1);
@@ -278,7 +327,7 @@
                         </div>
                         {hasMore && (
                             <div className="mt-8 flex justify-center">
-                                <button onClick={() => setPage(p => p + 1)} disabled={loading} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded font-bold transition-colors disabled:opacity-50">
+                                <button onClick={() => setPage(p => p + 1)} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded font-bold transition-colors disabled:opacity-50">
                                     {loading ? (isRTL ? 'جاري التحميل...' : 'Loading...') : (isRTL ? 'تحميل المزيد' : 'Load More')}
                                 </button>
                             </div>
@@ -287,7 +336,6 @@
                 );
             };
 
-            // --- Hero Banner Component ---
             const HeroBanner = ({ endpoint }) => {
                 const [heroItem, setHeroItem] = useState(null);
                 
@@ -326,7 +374,7 @@
                                     <span className="text-[10px] font-medium">My List</span>
                                 </button>
                                 
-                                <button onClick={() => openDetails(heroItem)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2 rounded font-bold hover:bg-gray-200 transition-colors">
+                                <button onClick={() => openDetails(heroItem)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
                                     <Play size={20} className="fill-black" /> Play
                                 </button>
                                 
@@ -340,7 +388,6 @@
                 );
             };
 
-            // --- Details Modal ---
             const DetailsModal = ({ media, onClose }) => {
                 const [details, setDetails] = useState(null);
                 const [episodes, setEpisodes] = useState([]);
@@ -405,14 +452,14 @@
                                 </div>
 
                                 {type === 'movie' ? (
-                                    <button onClick={() => launchPlayer(details)} className="w-full flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors">
+                                    <button onClick={() => launchPlayer(details)} className="w-full flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
                                         <Play size={20} className="fill-black" /> Play Movie
                                     </button>
                                 ) : (
                                     <button onClick={() => {
                                         const ep = episodes[0];
                                         if (ep) launchPlayer(details, season, ep.episode_number, ep.name);
-                                    }} className="w-full flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors">
+                                    }} className="w-full flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
                                         <Play size={20} className="fill-black" /> Play S{season} E1
                                     </button>
                                 )}
@@ -471,16 +518,120 @@
                 const [showSettings, setShowSettings] = useState(false);
                 const [showCastGuide, setShowCastGuide] = useState(false);
                 const [copied, setCopied] = useState(false);
+                const [iptvStreamId, setIptvStreamId] = useState('');
+                const [autoSearchStatus, setAutoSearchStatus] = useState('idle'); 
+                const [streamStatus, setStreamStatus] = useState('checking'); 
 
                 if (!activePlayerMedia) return null;
 
+                const isIptv = selectedServerId === 'iptv';
+
+                // --- Background Auto Search for IPTV ---
+                useEffect(() => {
+                    setIptvStreamId('');
+                    setAutoSearchStatus('idle');
+                }, [activePlayerMedia]);
+
+                useEffect(() => {
+                    if (!isIptv || !iptvCache.loaded || iptvStreamId || !activePlayerMedia) return;
+
+                    const normalize = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const targetName = normalize(activePlayerMedia.title);
+                    
+                    setAutoSearchStatus('searching');
+
+                    if (activePlayerMedia.type === 'movie') {
+                        const match = iptvCache.vod.find(item => normalize(item.name) === targetName) || 
+                                      iptvCache.vod.find(item => normalize(item.name).includes(targetName));
+                        if (match) {
+                            setIptvStreamId(match.stream_id);
+                            setAutoSearchStatus('found');
+                        } else {
+                            setAutoSearchStatus('not_found');
+                        }
+                    } else if (activePlayerMedia.type === 'tv') {
+                        const match = iptvCache.series.find(item => normalize(item.name) === targetName) || 
+                                      iptvCache.series.find(item => normalize(item.name).includes(targetName));
+                        
+                        if (match) {
+                            const cleanDomain = iptvDomain.replace(/\/$/, '');
+                            const url = `${cleanDomain}/player_api.php?username=${iptvUser}&password=${iptvPass}&action=get_series_info&series_id=${match.series_id}`;
+                            
+                            const fetchSeriesInfo = async () => {
+                                try {
+                                    let data = null;
+                                    const proxies = ['', 'https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?'];
+                                    for (const proxy of proxies) {
+                                        try {
+                                            const fetchUrl = proxy ? `${proxy}${encodeURIComponent(url)}` : url;
+                                            const res = await fetch(fetchUrl, { cache: 'no-store' });
+                                            if (res.ok) { data = await res.json(); break; }
+                                        } catch (e) { continue; }
+                                    }
+                                    if (!data) throw new Error('Failed to fetch series info');
+                                    
+                                    const seasonData = data?.episodes?.[activePlayerMedia.season];
+                                    if (seasonData && Array.isArray(seasonData)) {
+                                        const ep = seasonData.find(e => parseInt(e.episode_num) === parseInt(activePlayerMedia.episode));
+                                        if (ep && ep.id) {
+                                            setIptvStreamId(ep.id);
+                                            setAutoSearchStatus('found');
+                                            return;
+                                        }
+                                    }
+                                    setAutoSearchStatus('not_found');
+                                } catch (err) {
+                                    setAutoSearchStatus('not_found');
+                                }
+                            };
+                            fetchSeriesInfo();
+                        } else {
+                            setAutoSearchStatus('not_found');
+                        }
+                    }
+                }, [selectedServerId, iptvCache.loaded, activePlayerMedia, iptvStreamId, isIptv, iptvDomain, iptvPass, iptvUser]);
+
                 // Dynamic URL calculation instantly based on selectedServerId
                 const activeUrl = useMemo(() => {
+                    if (isIptv) {
+                        if (!iptvStreamId || !iptvDomain || !iptvUser || !iptvPass) return '';
+                        const typePath = activePlayerMedia.type === 'tv' ? 'series' : 'movie';
+                        const cleanDomain = iptvDomain.replace(/\/$/, '');
+                        return `${cleanDomain}/${typePath}/${iptvUser}/${iptvPass}/${iptvStreamId}.mp4`;
+                    }
+                    
                     const server = SERVERS.find(s => s.id === selectedServerId) || SERVERS[0];
                     return server.getUrl(activePlayerMedia.type, activePlayerMedia.tmdbId, activePlayerMedia.imdbId, activePlayerMedia.season, activePlayerMedia.episode);
-                }, [activePlayerMedia, selectedServerId]);
+                }, [activePlayerMedia, selectedServerId, isIptv, iptvStreamId, iptvDomain, iptvUser, iptvPass]);
+
+                // Test Channel using user's no-cors snippet
+                const testChannel = async (url) => {
+                    if (!url) return false;
+                    try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 5000);
+                        await fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-cache', signal: controller.signal });
+                        clearTimeout(timeoutId);
+                        return true;
+                    } catch (error) {
+                        return false;
+                    }
+                };
+
+                // Trigger test when URL changes
+                useEffect(() => {
+                    if (activeUrl && isIptv && iptvStreamId) {
+                        setStreamStatus('checking');
+                        testChannel(activeUrl).then(isOnline => {
+                            setStreamStatus(isOnline ? 'online' : 'offline');
+                        });
+                    } else if (activeUrl && !isIptv) {
+                        setStreamStatus('online'); // Global embedded servers handle their own errors
+                    }
+                }, [activeUrl, isIptv, iptvStreamId]);
 
                 const handleCopyUrl = () => {
+                    if (!activeUrl) return;
                     try {
                         const textArea = document.createElement("textarea");
                         textArea.value = activeUrl;
@@ -502,7 +653,7 @@
                 return (
                     <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in" dir={isRTL ? 'rtl' : 'ltr'}>
                         {/* Player Header */}
-                        <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-10 transition-opacity duration-300">
+                        <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-30 transition-opacity duration-300">
                             <div className="flex items-center gap-3">
                                 <button onClick={() => setActivePlayerMedia(null)} className="text-white hover:text-gray-300 p-1"><ChevronDown size={28} className="rotate-90"/></button>
                                 <span className="font-bold text-white text-sm sm:text-base line-clamp-1">
@@ -518,13 +669,13 @@
                                         <div className="fixed inset-0 z-40" onClick={() => setShowSettings(false)}></div>
                                         <div className={`absolute top-full mt-2 w-64 bg-[#181818] border border-gray-800 rounded-xl shadow-2xl overflow-hidden z-50 ${isRTL ? 'left-0' : 'right-0'}`}>
                                             <button onClick={() => { setShowCastGuide(true); setShowSettings(false); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-800 text-white text-sm border-b border-gray-800">
-                                                <Cast size={16} className="text-blue-400"/> {isRTL ? 'دليل البث للتلفاز' : 'Cast to TV'}
+                                                <Cast size={16} className="text-indigo-400"/> {isRTL ? 'دليل البث للتلفاز' : 'Cast to TV'}
                                             </button>
                                             <div className="p-3">
                                                 <div className="text-[10px] uppercase text-gray-500 mb-2 font-bold px-1">{isRTL ? 'تغيير الخادم' : 'Change Server'}</div>
-                                                <div className="flex flex-col gap-1">
+                                                <div className="flex flex-col gap-1 max-h-48 overflow-y-auto hide-scrollbar">
                                                     {SERVERS.map(s => (
-                                                        <button key={s.id} onClick={() => { setSelectedServerId(s.id); setShowSettings(false); }} className={`flex items-center justify-between px-3 py-2 text-xs font-bold rounded-lg ${selectedServerId === s.id ? 'bg-red-600/20 text-red-500' : 'text-gray-300 hover:bg-neutral-800 hover:text-white'}`}>
+                                                        <button key={s.id} onClick={() => { setSelectedServerId(s.id); setShowSettings(false); }} className={`flex items-center justify-between px-3 py-2 text-xs font-bold rounded-lg ${selectedServerId === s.id ? 'bg-indigo-600/20 text-indigo-400' : 'text-gray-300 hover:bg-neutral-800 hover:text-white'}`}>
                                                             {s.name} {selectedServerId === s.id && <Check size={14} />}
                                                         </button>
                                                     ))}
@@ -537,27 +688,91 @@
                         </div>
 
                         {/* Video Frame */}
-                        <div className="flex-grow flex flex-col items-center justify-center bg-black pt-14 pb-4 px-0 sm:px-4 overflow-y-auto">
-                            <div className="w-full aspect-video max-h-[75vh] max-w-6xl mx-auto rounded-lg overflow-hidden shadow-2xl relative">
-                                <iframe src={activeUrl} className="absolute inset-0 w-full h-full border-0" allowFullScreen allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>
-                            </div>
+                        <div className="flex-grow flex flex-col items-center justify-center bg-black pt-14 pb-4 px-0 sm:px-4 overflow-y-auto relative z-10">
+                            
+                            {isIptv && !activeUrl ? (
+                                <div className="absolute inset-0 bg-[#0f0f0f] flex flex-col items-center justify-center p-6 text-center z-20">
+                                    <Server size={48} className="text-indigo-500 mb-4" />
+                                    <h3 className="text-xl font-bold mb-2 text-white">IPTV Stream Connection</h3>
+                                    
+                                    {/* Auto-Search Status Indicators */}
+                                    {!iptvCache.loaded && !iptvCache.error && (
+                                        <div className="text-indigo-400 mb-4 flex items-center gap-2 animate-pulse text-sm">
+                                            <Database size={16} className="animate-spin" /> Loading IPTV Database...
+                                        </div>
+                                    )}
+                                    {autoSearchStatus === 'searching' && (
+                                         <div className="text-amber-400 mb-4 flex items-center gap-2 animate-pulse text-sm">
+                                            <Search size={16} /> Auto-searching for "{activePlayerMedia.title}"...
+                                        </div>
+                                    )}
+                                    {iptvCache.error && (
+                                         <div className="text-red-400 mb-4 text-xs max-w-md bg-red-900/20 p-2 rounded border border-red-500/20">
+                                            {iptvCache.error}
+                                         </div>
+                                    )}
+                                    {autoSearchStatus === 'not_found' && (
+                                         <div className="text-amber-400 mb-4 text-sm max-w-md bg-amber-900/20 p-3 rounded">
+                                            Could not automatically match "{activePlayerMedia.title}" in your IPTV list.
+                                         </div>
+                                    )}
+
+                                    <p className="text-sm text-gray-400 max-w-md mb-6 leading-relaxed">
+                                        Please manually enter the numeric Stream ID below.
+                                    </p>
+                                    <div className="flex flex-col gap-3 w-full max-w-xs">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Stream ID (e.g., 12345)" 
+                                            value={iptvStreamId} 
+                                            onChange={e => setIptvStreamId(e.target.value)} 
+                                            className="bg-neutral-800 border border-neutral-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500 text-center font-mono" 
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="w-full aspect-video max-h-[75vh] max-w-6xl mx-auto rounded-lg overflow-hidden shadow-2xl relative">
+                                    {isIptv && streamStatus === 'checking' && (
+                                        <div className="absolute inset-0 bg-neutral-900 flex flex-col items-center justify-center z-20">
+                                            <Database size={32} className="text-indigo-500 animate-spin mb-4" />
+                                            <p className="text-white font-bold">Pinging Stream Connection...</p>
+                                        </div>
+                                    )}
+                                    {isIptv && streamStatus === 'offline' && (
+                                        <div className="absolute inset-0 bg-neutral-900 flex flex-col items-center justify-center z-20 p-6 text-center">
+                                            <AlertCircle size={48} className="text-red-500 mb-4" />
+                                            <h3 className="text-xl font-bold text-white mb-2">Stream Unreachable</h3>
+                                            <p className="text-sm text-gray-400 max-w-md mb-4">
+                                                The browser blocked the connection, or the Stream ID is invalid. <br/><br/>
+                                                <strong className="text-amber-400">Remember:</strong> If your IPTV domain is HTTP, browsers block it. You must open the URL in VLC, an external app, or a new tab.
+                                            </p>
+                                            <a href={activeUrl} target="_blank" rel="noopener noreferrer" className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold transition-colors">
+                                                Open Stream in New Tab
+                                            </a>
+                                        </div>
+                                    )}
+                                    <iframe src={activeUrl} className={`absolute inset-0 w-full h-full border-0 ${streamStatus === 'online' ? 'opacity-100' : 'opacity-0'}`} allowFullScreen allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>
+                                </div>
+                            )}
 
                             {/* Full Link Visibility and Copy */}
                             <div className="w-full max-w-6xl mx-auto mt-4 px-4 sm:px-0">
                                 <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 p-2 sm:px-4 sm:py-3 rounded-lg shadow-lg">
                                     <Globe size={18} className="text-gray-500 flex-shrink-0" />
                                     <div className="flex-grow min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                                        <span className="text-xs sm:text-sm text-gray-400 font-mono select-all" dir="ltr">{activeUrl}</span>
+                                        <span className="text-xs sm:text-sm text-gray-400 font-mono select-all" dir="ltr">{activeUrl || 'Awaiting Input...'}</span>
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
-                                        <button onClick={handleCopyUrl} className="flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-white px-3 py-1.5 rounded transition-colors text-xs font-bold">
+                                        <button onClick={handleCopyUrl} disabled={!activeUrl} className="flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-white px-3 py-1.5 rounded transition-colors text-xs font-bold">
                                             {copied ? <CheckCheck size={14} className="text-green-400" /> : <Copy size={14} />}
                                             <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy Link'}</span>
                                         </button>
-                                        <a href={activeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded transition-colors text-xs font-bold shadow-lg shadow-indigo-900/20">
-                                            <ExternalLink size={14} />
-                                            <span className="hidden sm:inline">Open in Tab</span>
-                                        </a>
+                                        {activeUrl && (
+                                            <a href={activeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded transition-colors text-xs font-bold shadow-lg shadow-indigo-900/20">
+                                                <ExternalLink size={14} />
+                                                <span className="hidden sm:inline">Open in Tab</span>
+                                            </a>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -567,9 +782,9 @@
                         {showCastGuide && (
                             <div className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
                                 <div className="bg-[#181818] p-6 rounded-xl max-w-sm w-full border border-gray-800">
-                                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Cast size={20} className="text-blue-500"/> {isRTL ? 'كيفية البث' : 'How to Cast'}</h3>
+                                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Cast size={20} className="text-indigo-500"/> {isRTL ? 'كيفية البث' : 'How to Cast'}</h3>
                                     <p className="text-sm text-gray-400 mb-4">{isRTL ? 'استخدم تطبيق Web Video Caster على هاتفك، أو ميزة Cast في متصفح Chrome على الكمبيوتر.' : 'Use the Web Video Caster app on mobile, or Chrome Cast Tab on desktop to cast with subtitles.'}</p>
-                                    <button onClick={() => setShowCastGuide(false)} className="w-full py-2 bg-red-600 text-white font-bold rounded hover:bg-red-700">Close</button>
+                                    <button onClick={() => setShowCastGuide(false)} className="w-full py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700">Close</button>
                                 </div>
                             </div>
                         )}
@@ -663,40 +878,134 @@
                 );
             };
 
-            const SettingsView = () => (
-                <div className="pt-12 pb-24 px-4 max-w-md mx-auto min-h-screen animate-in fade-in" dir={isRTL ? 'rtl' : 'ltr'}>
-                    <h1 className="text-2xl font-bold mb-8 flex items-center gap-3"><Settings size={28}/> App Settings</h1>
-                    
-                    <div className="space-y-6">
-                        <div className="bg-[#181818] p-4 rounded-lg">
-                            <label className="text-sm font-bold text-gray-400 mb-2 block">TMDB API Key</label>
-                            <input type="text" value={tmdbKey} onChange={e => setTmdbKey(e.target.value)} className="w-full bg-[#2b2b2b] text-white px-3 py-2 rounded outline-none focus:ring-2 focus:ring-red-600" />
-                        </div>
+            const SettingsView = () => {
+                const [testState, setTestState] = useState({ loading: false, result: null, isError: false });
 
-                        <div className="bg-[#181818] p-4 rounded-lg">
-                            <label className="text-sm font-bold text-gray-400 mb-2 block">Metadata Language</label>
-                            <select value={dbLanguage} onChange={e => setDbLanguage(e.target.value)} className="w-full bg-[#2b2b2b] text-white px-3 py-2 rounded outline-none" dir="ltr">
-                                <option value="en-US">English</option>
-                                <option value="ar">Arabic (العربية)</option>
-                                <option value="fr-FR">French (Français)</option>
-                                <option value="es-ES">Spanish (Español)</option>
-                            </select>
-                        </div>
+                const handleTestConnection = async () => {
+                    if (!iptvDomain || !iptvUser || !iptvPass) {
+                        setTestState({ loading: false, result: 'Please fill in all credentials.', isError: true });
+                        return;
+                    }
+                    setTestState({ loading: true, result: null, isError: false });
+                    try {
+                        const cleanDomain = iptvDomain.replace(/\/$/, '');
+                        const url = `${cleanDomain}/player_api.php?username=${iptvUser}&password=${iptvPass}`;
+                        
+                        const fetchWithProxy = async () => {
+                            const isSecureEnv = window.location.protocol === 'https:';
+                            const isHttpTarget = url.startsWith('http://');
+                            
+                            if (!isSecureEnv || !isHttpTarget) {
+                                try {
+                                    const res = await fetch(url);
+                                    if (res.ok) return await res.json();
+                                } catch(e) {}
+                            }
 
-                        <div className="bg-[#181818] p-4 rounded-lg flex justify-between items-center">
-                            <div>
-                                <span className="font-bold block">Clear Watch History</span>
-                                <span className="text-xs text-gray-400">{historyList.length} items</span>
+                            const proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?'];
+                            for (const proxy of proxies) {
+                                try {
+                                    const fetchUrl = `${proxy}${encodeURIComponent(url)}`;
+                                    const res = await fetch(fetchUrl, { cache: 'no-store' });
+                                    if (res.ok) return await res.json();
+                                } catch(e) { continue; }
+                            }
+                            throw new Error('All proxies failed');
+                        };
+
+                        const data = await fetchWithProxy();
+                        if (data.user_info && data.user_info.auth === 1) {
+                            const expDate = data.user_info.exp_date ? new Date(data.user_info.exp_date * 1000).toLocaleDateString() : 'Unlimited';
+                            setTestState({ loading: false, result: `✅ Connected! Status: ${data.user_info.status} | Expires: ${expDate}`, isError: false });
+                        } else {
+                            setTestState({ loading: false, result: '❌ Invalid Username or Password.', isError: true });
+                        }
+                    } catch(e) {
+                        const errMsg = window.location.protocol === 'https:' && iptvDomain.startsWith('http://')
+                            ? '❌ Canvas blocks HTTP requests. Please save as a local HTML file.'
+                            : '❌ Network/CORS Error. Ensure domain is correct.';
+                        setTestState({ loading: false, result: errMsg, isError: true });
+                    }
+                };
+
+                return (
+                    <div className="pt-12 pb-24 px-4 max-w-md mx-auto min-h-screen animate-in fade-in" dir={isRTL ? 'rtl' : 'ltr'}>
+                        <h1 className="text-2xl font-bold mb-8 flex items-center gap-3"><Settings size={28}/> App Settings</h1>
+                        
+                        <div className="space-y-6">
+                            {/* IPTV Settings Section */}
+                            <div className="bg-[#181818] p-4 rounded-lg border border-neutral-800">
+                                <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2"><KeySquare size={18} className="text-indigo-400"/> IPTV Configuration</h2>
+                                
+                                <div className="bg-amber-900/20 border border-amber-500/20 text-amber-400/90 text-xs p-3 rounded mb-4 flex gap-2">
+                                    <AlertCircle size={16} className="flex-shrink-0"/>
+                                    <p><strong>Important:</strong> Browsers block HTTP media on HTTPS sites. Because your domain uses <code className="bg-black px-1 rounded">http://</code>, you must host this file locally on your computer to watch it.</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-400 mb-1 block">Domain URL (with port)</label>
+                                        <input type="text" placeholder="e.g., http://hydraa.st:8080" value={iptvDomain} onChange={e => setIptvDomain(e.target.value)} className="w-full bg-[#2b2b2b] text-white text-sm px-3 py-2 rounded outline-none focus:ring-1 focus:ring-indigo-500" dir="ltr" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-400 mb-1 block">Username</label>
+                                        <input type="text" value={iptvUser} onChange={e => setIptvUser(e.target.value)} className="w-full bg-[#2b2b2b] text-white text-sm px-3 py-2 rounded outline-none focus:ring-1 focus:ring-indigo-500" dir="ltr" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-400 mb-1 block">Password</label>
+                                        <input type="password" value={iptvPass} onChange={e => setIptvPass(e.target.value)} className="w-full bg-[#2b2b2b] text-white text-sm px-3 py-2 rounded outline-none focus:ring-1 focus:ring-indigo-500" dir="ltr" />
+                                    </div>
+                                </div>
+                                
+                                {/* Test Credentials Button */}
+                                <div className="mt-4">
+                                    <button onClick={handleTestConnection} disabled={testState.loading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-2 rounded transition-colors disabled:opacity-50">
+                                        {testState.loading ? 'Testing...' : 'Test Connection'}
+                                    </button>
+                                    {testState.result && (
+                                        <div className={`mt-2 p-2 rounded text-xs font-medium ${testState.isError ? 'bg-red-900/30 text-red-400 border border-red-500/20' : 'bg-green-900/30 text-green-400 border border-green-500/20'}`}>
+                                            {testState.result}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Database Cache Status Indicator */}
+                                <div className="mt-4 pt-4 border-t border-neutral-800 text-[10px] text-gray-400 font-mono">
+                                    Status: {iptvCache.loaded ? <span className="text-green-400">Connected ({iptvCache.vod.length} Movies, {iptvCache.series.length} Series)</span> : (iptvCache.error ? <span className="text-red-400">{iptvCache.error}</span> : "Waiting...")}
+                                </div>
                             </div>
-                            <button onClick={() => setHistoryList([])} className="bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white px-4 py-2 rounded font-bold text-sm transition-colors">Clear</button>
+
+                            {/* General Settings Section */}
+                            <div className="bg-[#181818] p-4 rounded-lg">
+                                <label className="text-sm font-bold text-gray-400 mb-2 block">TMDB API Key</label>
+                                <input type="text" value={tmdbKey} onChange={e => setTmdbKey(e.target.value)} className="w-full bg-[#2b2b2b] text-white text-sm px-3 py-2 rounded outline-none focus:ring-1 focus:ring-indigo-500" dir="ltr" />
+                            </div>
+
+                            <div className="bg-[#181818] p-4 rounded-lg">
+                                <label className="text-sm font-bold text-gray-400 mb-2 block">Metadata Language</label>
+                                <select value={dbLanguage} onChange={e => setDbLanguage(e.target.value)} className="w-full bg-[#2b2b2b] text-white text-sm px-3 py-2 rounded outline-none" dir="ltr">
+                                    <option value="en-US">English</option>
+                                    <option value="ar">Arabic (العربية)</option>
+                                    <option value="fr-FR">French (Français)</option>
+                                    <option value="es-ES">Spanish (Español)</option>
+                                </select>
+                            </div>
+
+                            <div className="bg-[#181818] p-4 rounded-lg flex justify-between items-center">
+                                <div>
+                                    <span className="font-bold text-sm block">Clear Watch History</span>
+                                    <span className="text-xs text-gray-400">{historyList.length} items</span>
+                                </div>
+                                <button onClick={() => setHistoryList([])} className="bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white px-4 py-2 rounded font-bold text-sm transition-colors">Clear</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            );
+                );
+            };
 
             // --- Render ---
             return (
-                <div className="relative w-full h-full min-h-screen">
+                <div className="relative w-full h-full min-h-screen pb-20">
                     {/* Main Content Areas */}
                     {seeAllConfig ? (
                         <SeeAllView config={seeAllConfig} onBack={() => setSeeAllConfig(null)} />

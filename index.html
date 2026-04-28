@@ -3,12 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal Index Player</title>
+    <title>Universal Index Player Pro</title>
     
-    <!-- Tailwind CSS for Styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Babel for compiling React JSX in the browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <style>
@@ -16,34 +13,63 @@
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #334155; border-radius: 20px; }
+        
+        /* Hide scrollbar for category pills but allow scroll */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-slate-950">
-    <!-- React app mounts here -->
     <div id="root"></div>
 
-    <!-- The React Application -->
     <script type="text/babel" data-type="module">
-        import React, { useState, useEffect, useMemo } from 'https://esm.sh/react@18.2.0';
+        import React, { useState, useEffect, useMemo, useRef } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
-        import { Play, Search, Film, Tv, ExternalLink, Database, Image as ImageIcon, ChevronDown, ChevronUp, Clock, CheckCircle2, Calendar, Settings, Key, Info, Heart, History, Trash2, X, Server } from 'https://esm.sh/lucide-react@0.292.0';
+        import { Play, Search, Film, Tv, ExternalLink, Database, Image as ImageIcon, ChevronDown, ChevronUp, Clock, Calendar, Settings, Key, Heart, History, Trash2, X, Server, TrendingUp, ChevronRight, PlayCircle, AlertCircle, Globe, Star, Cast, MonitorPlay, CheckCircle2 } from 'https://esm.sh/lucide-react@0.292.0';
 
         // Server Configurations
         const SERVERS = [
           {
             id: 'vaplayer',
             name: 'VAPlayer',
-            getUrl: (type, imdbId, s, e) => {
-              let url = `https://vaplayer.ru/embed/${type}/${imdbId}`;
+            getUrl: (type, tmdbId, imdbId, s, e) => {
+              let url = `https://vaplayer.ru/embed/${type}/${imdbId || tmdbId}`;
               if (type === 'tv' && s && e) url += `?s=${s}&e=${e}`;
+              return url;
+            }
+          },
+          {
+            id: 'autoembed',
+            name: 'AutoEmbed',
+            getUrl: (type, tmdbId, imdbId, s, e) => {
+              let url = `https://autoembed.to/${type}/tmdb/${tmdbId}`;
+              if (type === 'tv' && s && e) url += `-${s}-${e}`;
+              return url;
+            }
+          },
+          {
+            id: 'smashy',
+            name: 'SmashyStream',
+            getUrl: (type, tmdbId, imdbId, s, e) => {
+              let url = `https://player.smashy.stream/${type}/${tmdbId}`;
+              if (type === 'tv' && s && e) url += `?s=${s}&e=${e}`;
+              return url;
+            }
+          },
+          {
+            id: 'multiembed',
+            name: 'MultiEmbed',
+            getUrl: (type, tmdbId, imdbId, s, e) => {
+              let url = `https://multiembed.mov/?video_id=${imdbId || tmdbId}`;
+              if (type === 'tv' && s && e) url += `&s=${s}&e=${e}`;
               return url;
             }
           },
           {
             id: 'vidsrc',
             name: 'VidSrc',
-            getUrl: (type, imdbId, s, e) => {
-              let url = `https://vidsrc.me/embed/${type}?imdb=${imdbId}`;
+            getUrl: (type, tmdbId, imdbId, s, e) => {
+              let url = `https://vidsrc.me/embed/${type}?tmdb=${tmdbId}`;
               if (type === 'tv' && s && e) url += `&season=${s}&episode=${e}`;
               return url;
             }
@@ -51,27 +77,35 @@
           {
             id: 'vidsrcpro',
             name: 'VidSrc Pro',
-            getUrl: (type, imdbId, s, e) => {
-              let url = `https://vidsrc.cc/v2/embed/${type}/${imdbId}`;
-              if (type === 'tv' && s && e) url += `/${s}/${e}`;
-              return url;
-            }
-          },
-          {
-            id: 'embedsu',
-            name: 'EmbedSU',
-            getUrl: (type, imdbId, s, e) => {
-              let url = `https://embed.su/embed/${type}/${imdbId}`;
+            getUrl: (type, tmdbId, imdbId, s, e) => {
+              let url = `https://vidsrc.cc/v2/embed/${type}/${tmdbId}`;
               if (type === 'tv' && s && e) url += `/${s}/${e}`;
               return url;
             }
           }
         ];
 
+        // New Discover Configuration split by Movies and TV
+        const DISCOVER_CONFIG = {
+          movie: [
+            { id: 'trending', name: { en: 'Trending Today', ar: 'شائع اليوم' }, url: '/trending/movie/day' },
+            { id: 'box_office', name: { en: 'Box Office (Now Playing)', ar: 'في صالات السينما' }, url: '/movie/now_playing' },
+            { id: 'popular', name: { en: 'Popular Movies', ar: 'أفلام مشهورة' }, url: '/movie/popular' },
+            { id: 'top_rated', name: { en: 'All Time Favorites', ar: 'مفضلة دائمًا' }, url: '/movie/top_rated' }
+          ],
+          tv: [
+            { id: 'trending', name: { en: 'Trending Today', ar: 'شائع اليوم' }, url: '/trending/tv/day' },
+            { id: 'airing', name: { en: 'Airing Today', ar: 'يُعرض اليوم' }, url: '/tv/airing_today' },
+            { id: 'popular', name: { en: 'Popular TV Shows', ar: 'مسلسلات مشهورة' }, url: '/tv/popular' },
+            { id: 'top_rated', name: { en: 'All Time Favorites', ar: 'مفضلة دائمًا' }, url: '/tv/top_rated' }
+          ]
+        };
+
         function App() {
           // Local Storage Initializers
-          const [apiKey, setApiKey] = useState(() => localStorage.getItem('omdbApiKey') || '46fbc5e7');
-          const [selectedServerId, setSelectedServerId] = useState(() => localStorage.getItem('vaServer') || 'vaplayer');
+          const [tmdbKey, setTmdbKey] = useState(() => localStorage.getItem('vaTmdbKey') || '15d2ea6d0dc1d476efbca3eba2b9bbfb');
+          const [selectedServerId, setSelectedServerId] = useState(() => localStorage.getItem('vaServer') || 'autoembed');
+          const [dbLanguage, setDbLanguage] = useState(() => localStorage.getItem('vaLanguage') || 'en-US');
           const [favorites, setFavorites] = useState(() => {
             try { return JSON.parse(localStorage.getItem('vaFavorites')) || []; } catch(e) { return []; }
           });
@@ -81,11 +115,22 @@
 
           // Core UI State
           const [showSettings, setShowSettings] = useState(false);
-          const [activeTab, setActiveTab] = useState('search'); // 'search', 'favorites', 'history'
-          const [query, setQuery] = useState('Breaking Bad');
+          const [showPlayerSettings, setShowPlayerSettings] = useState(false);
+          const [showCastHelp, setShowCastHelp] = useState(false);
+          const [activeTab, setActiveTab] = useState('discover'); // discover, search, favorites, history
+          
+          // New Category State
+          const [discoverMainType, setDiscoverMainType] = useState('movie'); // movie, tv
+          const [discoverSubCategory, setDiscoverSubCategory] = useState('trending'); 
+          
+          const [query, setQuery] = useState('');
+          
+          // Data State
           const [results, setResults] = useState([]);
           const [loading, setLoading] = useState(false);
           const [error, setError] = useState('');
+          const [page, setPage] = useState(1);
+          const [hasMore, setHasMore] = useState(true);
           
           // Player State
           const [activeMedia, setActiveMedia] = useState(null);
@@ -96,113 +141,137 @@
           const [episodesData, setEpisodesData] = useState([]);
           const [activeSeason, setActiveSeason] = useState(1);
 
-          // Detailed Episode Info State
-          const [expandedEpisode, setExpandedEpisode] = useState(null);
-          const [episodeDetailsCache, setEpisodeDetailsCache] = useState({});
-          const [fetchingEpisodeId, setFetchingEpisodeId] = useState(null);
-
           // Persistence Effects
           useEffect(() => localStorage.setItem('vaFavorites', JSON.stringify(favorites)), [favorites]);
           useEffect(() => localStorage.setItem('vaHistory', JSON.stringify(historyList)), [historyList]);
           useEffect(() => localStorage.setItem('vaServer', selectedServerId), [selectedServerId]);
+          useEffect(() => localStorage.setItem('vaTmdbKey', tmdbKey), [tmdbKey]);
+          useEffect(() => localStorage.setItem('vaLanguage', dbLanguage), [dbLanguage]);
 
-          const handleApiKeyChange = (e) => {
-            const newKey = e.target.value;
-            setApiKey(newKey);
-            localStorage.setItem('omdbApiKey', newKey);
-          };
-
-          const toggleFavorite = (item) => {
-            setFavorites(prev => {
-              if (prev.some(f => f.imdbID === item.imdbID)) {
-                return prev.filter(f => f.imdbID !== item.imdbID);
-              } else {
-                return [item, ...prev];
-              }
-            });
-          };
-
-          const clearHistory = () => setHistoryList([]);
-
-          const removeHistoryItem = (id) => {
-            setHistoryList(prev => prev.filter(h => h.id !== id));
-          };
-
-          // Debounced Search Effect
+          // Trigger re-fetch if language changes
           useEffect(() => {
-            if (activeTab !== 'search') return;
-            const handler = setTimeout(() => {
-              if (query.trim()) {
-                fetchInitialResults(query);
-              } else {
-                setResults([]);
-              }
-            }, 600);
-            return () => clearTimeout(handler);
-          }, [query, activeTab]);
+            if (activeTab === 'discover' || (activeTab === 'search' && query.trim())) {
+              setPage(1);
+              setResults([]);
+            }
+          }, [dbLanguage]);
 
-          // Step 1: Broad search to find the media or direct ID search
-          const fetchInitialResults = async (searchQuery) => {
-            setLoading(true);
+          // --- Tab & Category Management ---
+          const handleTabChange = (tab) => {
+            setActiveTab(tab);
+            setPage(1);
+            setResults([]);
             setError('');
-            setExpandedShow(null);
+            setHasMore(true);
+          };
+
+          const handleMainTypeChange = (type) => {
+            if (discoverMainType === type) return;
+            setDiscoverMainType(type);
+            setDiscoverSubCategory('trending');
+            setPage(1);
+            setResults([]);
+            setHasMore(true);
+          };
+
+          const handleSubCategoryChange = (subId) => {
+            if (discoverSubCategory === subId) return;
+            setDiscoverSubCategory(subId);
+            setPage(1);
+            setResults([]);
+            setHasMore(true);
+          };
+
+          const handleSearchQueryChange = (e) => {
+            setQuery(e.target.value);
+            setPage(1);
+            setResults([]);
+            setHasMore(true);
+          };
+
+          // --- Core Data Fetching (TMDB API) ---
+          useEffect(() => {
+            if (activeTab === 'discover') {
+              const endpoint = DISCOVER_CONFIG[discoverMainType].find(c => c.id === discoverSubCategory).url;
+              fetchData(`https://api.themoviedb.org/3${endpoint}?api_key=${tmdbKey}&language=${dbLanguage}&page=${page}`, page === 1);
+            } else if (activeTab === 'search') {
+              const handler = setTimeout(() => {
+                if (query.trim()) {
+                  fetchData(`https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&language=${dbLanguage}&query=${encodeURIComponent(query)}&page=${page}`, page === 1);
+                } else {
+                  setResults([]);
+                }
+              }, 600);
+              return () => clearTimeout(handler);
+            }
+          }, [activeTab, query, page, tmdbKey, dbLanguage, discoverMainType, discoverSubCategory]);
+
+          const fetchData = async (url, isNewSearch) => {
+            if (isNewSearch) setLoading(true);
+            setError('');
 
             try {
-              const isIdSearch = /^tt\d+$/i.test(searchQuery.trim());
-              const url = isIdSearch 
-                ? `https://www.omdbapi.com/?apikey=${apiKey}&i=${encodeURIComponent(searchQuery.trim())}`
-                : `https://www.omdbapi.com/?apikey=${apiKey}&s=${encodeURIComponent(searchQuery.trim())}`;
-
               const response = await fetch(url);
               const data = await response.json();
               
-              if (data.Response === "True") {
-                if (isIdSearch) {
-                  setResults([data]);
-                  setLoading(false);
-                } else {
-                  fetchDeepDetails(data.Search.slice(0, 8));
-                }
-              } else {
-                const hasArabic = /[\u0600-\u06FF]/.test(searchQuery);
-                if (hasArabic) {
-                  setError('OMDb API primarily supports English titles. Please search using the IMDb ID (e.g., tt1234567) or translate your search to English.');
-                } else {
-                  setError(data.Error);
-                }
+              if (data.results && data.results.length > 0) {
+                let typeHint = null;
+                if (url.includes('/movie/')) typeHint = 'movie';
+                else if (url.includes('/tv/')) typeHint = 'tv';
+
+                const mediaResults = data.results.map(item => {
+                  return { ...item, media_type: item.media_type || typeHint };
+                }).filter(item => item.media_type === 'movie' || item.media_type === 'tv' || (!item.media_type && (item.title || item.name)));
+                
+                const detailedItems = await fetchDeepDetails(mediaResults);
+                
+                setResults(prev => isNewSearch ? detailedItems : [...prev, ...detailedItems]);
+                setHasMore(data.page < data.total_pages);
+              } else if (isNewSearch) {
                 setResults([]);
-                setLoading(false);
+                setHasMore(false);
               }
             } catch (err) {
-              setError('Network error. Check your connection.');
-              setResults([]);
-              setLoading(false);
-            }
-          };
-
-          // Step 2: Deep fetch to get Plot, Runtime, and Total Seasons
-          const fetchDeepDetails = async (basicResults) => {
-            try {
-              const promises = basicResults.map(item => 
-                fetch(`https://www.omdbapi.com/?apikey=${apiKey}&i=${item.imdbID}`).then(res => res.json())
-              );
-              const detailedResults = await Promise.all(promises);
-              setResults(detailedResults);
-            } catch (err) {
-              setError('Failed to load deeper metadata.');
+              setError('Network error. Check your connection or API Key.');
             } finally {
-              setLoading(false);
+              if (isNewSearch) setLoading(false);
             }
           };
 
-          // Step 3: Fetch specific season data
-          const fetchEpisodes = async (imdbID, seasonNum) => {
-            setEpisodesLoading(true);
+          // Deep Fetch logic for TMDB
+          const fetchDeepDetails = async (basicResults) => {
+            const promises = basicResults.map(item => {
+              const type = item.media_type || (item.name ? 'tv' : 'movie');
+              return fetch(`https://api.themoviedb.org/3/${type}/${item.id}?api_key=${tmdbKey}&language=${dbLanguage}&append_to_response=external_ids`)
+                .then(res => res.json())
+                .catch(() => null);
+            });
+            
+            const detailedResults = await Promise.all(promises);
+            
+            return detailedResults.filter(Boolean).map(data => ({
+              id: data.id,
+              imdbID: data.external_ids?.imdb_id || null,
+              OriginalLanguage: data.original_language,
+              Title: data.title || data.name,
+              Type: data.name ? 'series' : 'movie',
+              Poster: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null,
+              backdrop: data.backdrop_path ? `https://image.tmdb.org/t/p/w780${data.backdrop_path}` : null,
+              Year: (data.release_date || data.first_air_date || '').substring(0, 4),
+              Plot: data.overview,
+              Runtime: data.runtime ? `${data.runtime} min` : (data.episode_run_time?.[0] ? `${data.episode_run_time[0]} min` : null),
+              Rating: data.vote_average ? data.vote_average.toFixed(1) : null,
+              totalSeasons: data.number_of_seasons
+            }));
+          };
 
+          // Fetch specific TV season data
+          const fetchEpisodes = async (tmdbId, seasonNum) => {
+            setEpisodesLoading(true);
             try {
-              const response = await fetch(`https://www.omdbapi.com/?apikey=${apiKey}&i=${imdbID}&Season=${seasonNum}`);
+              const response = await fetch(`https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNum}?api_key=${tmdbKey}&language=${dbLanguage}`);
               const data = await response.json();
-              setEpisodesData(data.Response === "True" ? data.Episodes : []);
+              setEpisodesData(data.episodes || []);
             } catch (err) {
               setEpisodesData([]);
             } finally {
@@ -210,48 +279,36 @@
             }
           };
 
-          const handleToggleShow = (imdbID, totalSeasons) => {
-            if (expandedShow === imdbID) {
+          const handleToggleShow = (tmdbId, totalSeasons) => {
+            if (expandedShow === tmdbId) {
               setExpandedShow(null);
             } else {
-              setExpandedShow(imdbID);
+              setExpandedShow(tmdbId);
               setActiveSeason(1);
-              setExpandedEpisode(null);
-              if (totalSeasons && totalSeasons !== "N/A") {
-                fetchEpisodes(imdbID, 1);
+              if (totalSeasons) {
+                fetchEpisodes(tmdbId, 1);
               }
             }
           };
 
-          const handleToggleEpisode = async (epId) => {
-            if (expandedEpisode === epId) {
-              setExpandedEpisode(null);
-              return;
-            }
-            setExpandedEpisode(epId);
-
-            if (episodeDetailsCache[epId]) return;
-
-            setFetchingEpisodeId(epId);
-            try {
-              const response = await fetch(`https://www.omdbapi.com/?apikey=${apiKey}&i=${epId}&plot=short`);
-              const data = await response.json();
-              if (data.Response === "True") {
-                setEpisodeDetailsCache(prev => ({ ...prev, [epId]: data }));
-              }
-            } catch (err) {
-              console.error("Failed to fetch episode details", err);
-            } finally {
-              setFetchingEpisodeId(null);
-            }
+          // --- History & Favorites ---
+          const toggleFavorite = (item) => {
+            setFavorites(prev => {
+              if (prev.some(f => f.id === item.id)) return prev.filter(f => f.id !== item.id);
+              return [item, ...prev];
+            });
           };
 
-          // Play Media & History Handler
+          const removeHistoryItem = (id) => setHistoryList(prev => prev.filter(h => h.historyId !== id));
+          const clearHistory = () => setHistoryList([]);
+
+          // --- Play Logic ---
           const playMedia = (item, season = null, episode = null, epTitle = null) => {
             const mediaType = item.Type === 'series' || item.Type === 'tv' ? 'tv' : 'movie';
             
             setActiveMedia({
-              imdbID: item.imdbID,
+              tmdbId: item.id,
+              imdbId: item.imdbID,
               type: mediaType,
               season,
               episode
@@ -261,9 +318,10 @@
 
             // Record History
             setHistoryList(prev => {
-              const historyId = `${item.imdbID}-${season || '0'}-${episode || '0'}`;
+              const histId = `${item.id}-${season || '0'}-${episode || '0'}`;
               const newRecord = {
-                id: historyId,
+                historyId: histId,
+                id: item.id,
                 imdbID: item.imdbID,
                 Title: item.Title,
                 Type: item.Type,
@@ -273,23 +331,23 @@
                 epTitle,
                 timestamp: Date.now()
               };
-              const filtered = prev.filter(h => h.id !== historyId);
-              return [newRecord, ...filtered].slice(0, 100); // Keep last 100 entries
+              const filtered = prev.filter(h => h.historyId !== histId);
+              return [newRecord, ...filtered].slice(0, 100);
             });
           };
 
-          // Derived Player URL based on selected server
+          // Derived URL
           const activeUrl = useMemo(() => {
             if (!activeMedia) return '';
             const server = SERVERS.find(s => s.id === selectedServerId) || SERVERS[0];
-            return server.getUrl(activeMedia.type, activeMedia.imdbID, activeMedia.season, activeMedia.episode);
+            return server.getUrl(activeMedia.type, activeMedia.tmdbId, activeMedia.imdbId, activeMedia.season, activeMedia.episode);
           }, [activeMedia, selectedServerId]);
 
-          // Determine which array to render for the grid view
+          // Setup Grid Items based on Tab
           const displayItems = activeTab === 'favorites' ? favorites : results;
 
           return (
-            <div className="min-h-screen bg-slate-950 text-slate-200 font-sans p-3 sm:p-4 md:p-8 pb-16">
+            <div className="min-h-screen bg-slate-950 text-slate-200 font-sans p-3 sm:p-4 md:p-8 pb-24" dir={dbLanguage === 'ar' ? 'rtl' : 'ltr'}>
               <div className="max-w-5xl mx-auto space-y-6">
                 
                 {/* Header Panel */}
@@ -300,9 +358,9 @@
                     </div>
                     <div>
                       <h1 className="text-xl font-bold text-white tracking-wide flex items-center gap-2">
-                        Universal Index <span className="text-indigo-400">Player</span>
+                        Universal Index <span className="text-indigo-400">Pro</span>
                       </h1>
-                      <p className="text-xs text-slate-400">Search OMDb and Stream Instantly</p>
+                      <p className="text-xs text-slate-400">Powered by TMDB Global Network</p>
                     </div>
                   </div>
                   
@@ -310,60 +368,114 @@
                     onClick={() => setShowSettings(!showSettings)}
                     className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-medium transition-colors"
                   >
-                    <Settings size={14} />
-                    API Settings
+                    <Settings size={14} /> Database Settings
                   </button>
                 </header>
 
                 {/* Settings Panel */}
                 {showSettings && (
-                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg flex flex-col sm:flex-row items-center gap-4 animate-in slide-in-from-top-2">
-                    <div className="flex items-center gap-2 text-slate-400 w-full sm:w-auto">
-                      <Key size={16} />
-                      <span className="text-sm font-medium whitespace-nowrap">OMDb API Key:</span>
+                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg flex flex-col gap-4 animate-in slide-in-from-top-2">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                      <div className="flex items-center gap-2 text-slate-400 w-full sm:w-auto">
+                        <Key size={16} />
+                        <span className="text-sm font-medium whitespace-nowrap">TMDB API Key:</span>
+                      </div>
+                      <input 
+                        type="text" 
+                        value={tmdbKey}
+                        onChange={(e) => setTmdbKey(e.target.value)}
+                        className="w-full sm:max-w-xs bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm outline-none transition-all text-slate-100"
+                      />
                     </div>
-                    <input 
-                      type="text" 
-                      value={apiKey}
-                      onChange={handleApiKeyChange}
-                      placeholder="Enter your OMDb API Key"
-                      className="w-full sm:max-w-xs bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm outline-none transition-all text-slate-100"
-                    />
-                    <p className="text-xs text-slate-500 w-full sm:w-auto">
-                      Saved locally to your browser.
-                    </p>
+                    
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 border-t border-slate-800 pt-4">
+                      <div className="flex items-center gap-2 text-slate-400 w-full sm:w-auto">
+                        <Globe size={16} />
+                        <span className="text-sm font-medium whitespace-nowrap">Metadata Language:</span>
+                      </div>
+                      <select 
+                        value={dbLanguage} 
+                        onChange={(e) => setDbLanguage(e.target.value)}
+                        className="w-full sm:max-w-xs bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm outline-none transition-all text-slate-100"
+                      >
+                        <option value="en-US">English (Default)</option>
+                        <option value="ar">Arabic (العربية)</option>
+                        <option value="fr-FR">French (Français)</option>
+                        <option value="es-ES">Spanish (Español)</option>
+                      </select>
+                      <p className="text-xs text-slate-500 w-full sm:w-auto">
+                        Pulls localized titles and plots from TMDB.
+                      </p>
+                    </div>
                   </div>
                 )}
 
                 {/* --- Unified Player Section --- */}
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 relative z-20">
                   
-                  {/* Server Selector */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-900 border border-slate-800 p-2 sm:px-4 sm:py-2.5 rounded-xl gap-3 sm:gap-4 shadow-lg">
-                    <span className="text-xs sm:text-sm font-bold text-slate-400 flex items-center gap-2 uppercase tracking-wider">
-                      <Server size={14} className="text-indigo-500" /> Source
+                  {/* Custom Player Header / Settings Overlay */}
+                  <div className="relative flex items-center justify-between bg-slate-900 border border-slate-800 p-2 sm:px-4 sm:py-2.5 rounded-xl shadow-lg z-30">
+                    <span className="text-xs sm:text-sm font-bold text-slate-300 flex items-center gap-2 tracking-wider">
+                      <MonitorPlay size={16} className="text-indigo-500" /> 
+                      {dbLanguage === 'ar' ? 'المشغل' : 'Media Player'}
                     </span>
-                    <div className="flex gap-2 overflow-x-auto custom-scrollbar w-full sm:w-auto pb-1 sm:pb-0">
-                      {SERVERS.map(s => (
-                        <button
-                          key={s.id}
-                          onClick={() => setSelectedServerId(s.id)}
-                          className={`px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-lg whitespace-nowrap transition-colors flex-1 sm:flex-none ${selectedServerId === s.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'}`}
-                        >
-                          {s.name}
-                        </button>
-                      ))}
+                    
+                    <div className="relative">
+                      <button 
+                        onClick={() => setShowPlayerSettings(!showPlayerSettings)}
+                        className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors border ${showPlayerSettings ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'}`}
+                      >
+                        <Settings size={14} /> {dbLanguage === 'ar' ? 'إعدادات المشغل' : 'Player Settings'}
+                      </button>
+
+                      {/* Dropdown Menu */}
+                      {showPlayerSettings && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowPlayerSettings(false)}></div>
+                          <div className={`absolute top-full mt-2 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 ${dbLanguage === 'ar' ? 'left-0' : 'right-0'}`}>
+                            
+                            {/* Casting Guide Option */}
+                            <button 
+                              onClick={() => { setShowCastHelp(true); setShowPlayerSettings(false); }} 
+                              className="w-full flex items-center gap-3 px-4 py-4 hover:bg-slate-800 text-slate-200 text-sm border-b border-slate-800 transition-colors"
+                            >
+                              <Cast size={16} className="text-blue-400"/> {dbLanguage === 'ar' ? 'كيفية البث للتلفاز (مهم)' : 'How to Cast to TV (Important)'}
+                            </button>
+
+                            {/* Server Source Options */}
+                            <div className="p-4">
+                              <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-3 font-bold flex items-center gap-2">
+                                <Server size={12}/> {dbLanguage === 'ar' ? 'اختر مصدر الخادم' : 'Select Server Source'}
+                              </div>
+                              <div className="flex flex-col gap-2">
+                                {SERVERS.map(s => (
+                                  <button
+                                    key={s.id}
+                                    onClick={() => { setSelectedServerId(s.id); setShowPlayerSettings(false); }}
+                                    className={`flex items-center justify-between px-3 py-2 text-xs font-bold rounded-lg transition-colors border ${selectedServerId === s.id ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800 hover:border-slate-600'}`}
+                                  >
+                                    {s.name}
+                                    {selectedServerId === s.id && <CheckCircle2 size={12} />}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
-                  <div className="relative w-full bg-black aspect-video flex items-center justify-center rounded-2xl overflow-hidden shadow-2xl border border-slate-800 transition-all">
+                  {/* The Iframe Player */}
+                  <div className="relative w-full bg-black aspect-video flex items-center justify-center rounded-2xl overflow-hidden shadow-2xl border border-slate-800 transition-all z-10">
                     {activeUrl ? (
                       <iframe
                         src={activeUrl}
                         title="Video Player"
                         className="absolute top-0 left-0 w-full h-full border-0"
                         allowFullScreen
-                        allow="autoplay; fullscreen"
+                        allow="autoplay; fullscreen; picture-in-picture; remote-playback"
                         sandbox="allow-scripts allow-same-origin allow-presentation"
                       />
                     ) : (
@@ -371,99 +483,126 @@
                         <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4">
                           <Play size={32} className="text-slate-600 ml-1" />
                         </div>
-                        <h3 className="text-lg font-medium text-slate-300">Ready to watch?</h3>
-                        <p className="text-slate-500 mt-2 max-w-sm text-sm">
-                          Search below, or open your Favorites/History, and click <strong className="text-blue-400">Play</strong> to load the stream.
-                        </p>
+                        <h3 className="text-lg font-medium text-slate-300">{dbLanguage === 'ar' ? 'جاهز للمشاهدة؟' : 'Ready to watch?'}</h3>
+                        <p className="text-slate-500 mt-2 max-w-sm text-sm">{dbLanguage === 'ar' ? 'اختر الوسائط أدناه لبدء البث.' : 'Select media below to start streaming.'}</p>
                       </div>
                     )}
                   </div>
-                  {/* Active URL Display */}
                   {activeUrl && (
                     <div className="px-2 text-center sm:text-left flex items-center justify-center sm:justify-start gap-2">
                       <ExternalLink size={12} className="text-slate-500 flex-shrink-0" />
-                      <a href={activeUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-slate-500 hover:text-indigo-400 break-all transition-colors">
+                      <a href={activeUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-slate-500 hover:text-indigo-400 break-all transition-colors" dir="ltr">
                         {activeUrl}
                       </a>
                     </div>
                   )}
                 </div>
 
-                {/* --- Navigation Tabs --- */}
-                <div className="flex bg-slate-900 rounded-xl p-1 shadow-lg border border-slate-800">
-                  <button 
-                    onClick={() => setActiveTab('search')} 
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'search' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                  >
-                    <Search size={16}/> <span className="hidden sm:inline">Search Media</span>
+                {/* --- Cast Help Modal --- */}
+                {showCastHelp && (
+                  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+                      <button onClick={() => setShowCastHelp(false)} className={`absolute top-4 ${dbLanguage === 'ar' ? 'left-4' : 'right-4'} text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-1 rounded-lg transition-colors`}><X size={20} /></button>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2.5 bg-blue-500/20 text-blue-400 rounded-xl"><Cast size={24} /></div>
+                        <h2 className="text-xl font-bold text-white">How to Cast to TV</h2>
+                      </div>
+                      <p className="text-sm text-slate-400 mb-6">Because this app uses embedded third-party players, the native "cast" button inside the video player is often blocked by browser security. Here are the best ways to cast with subtitles:</p>
+                      <div className="space-y-4">
+                        <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                          <h3 className="font-bold text-slate-200 mb-2 flex items-center gap-2"><span className="bg-indigo-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">1</span> Use "Web Video Caster" (Phones)</h3>
+                          <p className="text-xs text-slate-400 leading-relaxed">Download the <strong>Web Video Caster</strong> app on your iPhone or Android. Open this website inside the app's browser. It automatically detects the hidden video file and casts it flawlessly.</p>
+                        </div>
+                        <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                          <h3 className="font-bold text-slate-200 mb-2 flex items-center gap-2"><span className="bg-indigo-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">2</span> Use Chrome "Cast Tab" (PC)</h3>
+                          <p className="text-xs text-slate-400 leading-relaxed">If you are on a computer, click the <strong>three dots</strong> in Chrome > <strong>Cast...</strong> > and choose your TV to cast your entire tab including subtitles.</p>
+                        </div>
+                      </div>
+                      <button onClick={() => setShowCastHelp(false)} className="w-full mt-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors">Got it, thanks!</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* --- Main Navigation Tabs --- */}
+                <div className="flex flex-wrap bg-slate-900 rounded-xl p-1 shadow-lg border border-slate-800 mt-6 gap-1">
+                  <button onClick={() => handleTabChange('discover')} className={`flex-1 min-w-[70px] flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'discover' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                    <TrendingUp size={16}/> <span className="hidden sm:inline">{dbLanguage === 'ar' ? 'استكشف' : 'Discover'}</span>
                   </button>
-                  <button 
-                    onClick={() => setActiveTab('favorites')} 
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'favorites' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                  >
-                    <Heart size={16} className={activeTab === 'favorites' ? "fill-white" : ""} /> <span className="hidden sm:inline">Favorites</span>
-                    {favorites.length > 0 && <span className="ml-1 bg-slate-950 text-[10px] px-1.5 py-0.5 rounded-full">{favorites.length}</span>}
+                  <button onClick={() => handleTabChange('search')} className={`flex-1 min-w-[70px] flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'search' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                    <Search size={16}/> <span className="hidden sm:inline">{dbLanguage === 'ar' ? 'بحث' : 'Search'}</span>
                   </button>
-                  <button 
-                    onClick={() => setActiveTab('history')} 
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                  >
-                    <History size={16}/> <span className="hidden sm:inline">Watch History</span>
+                  <button onClick={() => handleTabChange('favorites')} className={`flex-1 min-w-[70px] flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'favorites' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                    <Heart size={16} className={activeTab === 'favorites' ? "fill-white" : ""} /> <span className="hidden sm:inline">{dbLanguage === 'ar' ? 'المفضلة' : 'Saved'}</span>
+                  </button>
+                  <button onClick={() => handleTabChange('history')} className={`flex-1 min-w-[70px] flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                    <History size={16}/> <span className="hidden sm:inline">{dbLanguage === 'ar' ? 'السجل' : 'History'}</span>
                   </button>
                 </div>
+
+                {/* --- Tab Content: Discover --- */}
+                {activeTab === 'discover' && (
+                  <div className="mt-4 mb-6">
+                    {/* Main Type Selector (Movies vs TV) */}
+                    <div className="flex bg-slate-900 border border-slate-800 rounded-xl p-1 mb-4 shadow-lg w-full max-w-sm">
+                       <button 
+                         onClick={() => handleMainTypeChange('movie')} 
+                         className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${discoverMainType === 'movie' ? 'bg-slate-800 text-indigo-400 shadow border border-slate-700' : 'text-slate-400 hover:text-white'}`}
+                       >
+                         <Film size={16}/> {dbLanguage === 'ar' ? 'الأفلام' : 'Movies'}
+                       </button>
+                       <button 
+                         onClick={() => handleMainTypeChange('tv')} 
+                         className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${discoverMainType === 'tv' ? 'bg-slate-800 text-indigo-400 shadow border border-slate-700' : 'text-slate-400 hover:text-white'}`}
+                       >
+                         <Tv size={16}/> {dbLanguage === 'ar' ? 'المسلسلات' : 'TV Shows'}
+                       </button>
+                    </div>
+
+                    {/* Sub-Category Pills */}
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                      {DISCOVER_CONFIG[discoverMainType].map((cat) => (
+                        <button
+                          key={cat.id}
+                          onClick={() => handleSubCategoryChange(cat.id)}
+                          className={`px-4 py-2 text-xs font-bold rounded-full whitespace-nowrap transition-all flex-shrink-0 border ${
+                            discoverSubCategory === cat.id 
+                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-900/30' 
+                              : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-600 hover:text-slate-200'
+                          }`}
+                        >
+                          {dbLanguage === 'ar' ? cat.name.ar : cat.name.en}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* --- Tab Content: History --- */}
                 {activeTab === 'history' && (
                   <div className="space-y-4 animate-in fade-in duration-300">
-                    <div className="flex items-center justify-between px-2">
-                      <h2 className="font-bold text-lg">Recent Watches</h2>
+                    <div className="flex items-center justify-between px-2 mt-4">
+                      <h2 className="font-bold text-lg">{dbLanguage === 'ar' ? 'المشاهدات الأخيرة' : 'Recent Watches'}</h2>
                       {historyList.length > 0 && (
-                        <button onClick={clearHistory} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors">
-                          <Trash2 size={14}/> Clear History
-                        </button>
+                        <button onClick={clearHistory} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors"><Trash2 size={14}/> {dbLanguage === 'ar' ? 'مسح السجل' : 'Clear History'}</button>
                       )}
                     </div>
-
                     {historyList.length === 0 ? (
-                      <div className="text-center py-12 text-slate-500 border border-slate-800 border-dashed rounded-2xl">
-                        <History size={32} className="mx-auto mb-3 opacity-20" />
-                        <p>Your watch history is currently empty.</p>
-                      </div>
+                      <div className="text-center py-12 text-slate-500 border border-slate-800 border-dashed rounded-2xl"><History size={32} className="mx-auto mb-3 opacity-20" /><p>{dbLanguage === 'ar' ? 'سجل المشاهدة فارغ حالياً.' : 'Your watch history is empty.'}</p></div>
                     ) : (
                       <div className="space-y-3">
                         {historyList.map(h => (
-                          <div key={h.id} className="flex items-center justify-between p-3 sm:p-4 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl transition-all shadow">
+                          <div key={h.historyId} className="flex items-center justify-between p-3 sm:p-4 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl transition-all shadow">
                             <div className="flex items-center gap-4 min-w-0">
-                              {h.Poster && h.Poster !== 'N/A' ? (
-                                <img src={h.Poster} className="w-12 h-16 sm:w-16 sm:h-24 object-cover rounded shadow flex-shrink-0" alt="Poster"/>
-                              ) : (
-                                <div className="w-12 h-16 sm:w-16 sm:h-24 bg-slate-800 rounded flex items-center justify-center flex-shrink-0"><Film size={20} className="text-slate-600"/></div>
-                              )}
+                              {h.Poster ? <img src={h.Poster} className="w-12 h-16 sm:w-16 sm:h-24 object-cover rounded shadow flex-shrink-0" alt="Poster"/> : <div className="w-12 h-16 sm:w-16 sm:h-24 bg-slate-800 rounded flex items-center justify-center flex-shrink-0"><Film size={20} className="text-slate-600"/></div>}
                               <div className="flex flex-col min-w-0">
                                 <span className="font-bold text-slate-200 line-clamp-1 text-sm sm:text-base">{h.Title}</span>
-                                <span className="text-xs sm:text-sm text-slate-400 mt-0.5 line-clamp-1">
-                                  {h.Type === 'series' && h.season ? `Season ${h.season} Episode ${h.episode}` : 'Movie'}
-                                  {h.epTitle ? ` - ${h.epTitle}` : ''}
-                                </span>
-                                <span className="text-[10px] text-slate-500 mt-2 flex items-center gap-1">
-                                  <Clock size={10}/> {new Date(h.timestamp).toLocaleString()}
-                                </span>
+                                <span className="text-xs sm:text-sm text-slate-400 mt-0.5 line-clamp-1">{h.Type === 'series' && h.season ? `Season ${h.season} Episode ${h.episode}` : 'Movie'}{h.epTitle ? ` - ${h.epTitle}` : ''}</span>
+                                <span className="text-[10px] text-slate-500 mt-2 flex items-center gap-1" dir="ltr"><Clock size={10}/> {new Date(h.timestamp).toLocaleString()}</span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                              <button 
-                                onClick={() => playMedia(h, h.season, h.episode, h.epTitle)} 
-                                className="p-2.5 sm:px-4 sm:py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white font-bold text-xs flex items-center gap-2 transition-colors shadow-lg shadow-blue-900/20"
-                              >
-                                <Play size={16} className="fill-white"/> <span className="hidden sm:inline">Play Again</span>
-                              </button>
-                              <button 
-                                onClick={() => removeHistoryItem(h.id)}
-                                className="p-2 sm:p-2.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
-                                title="Remove from history"
-                              >
-                                <X size={16} />
-                              </button>
+                            <div className="flex items-center gap-2 flex-shrink-0 mx-3">
+                              <button onClick={() => playMedia(h, h.season, h.episode, h.epTitle)} className="p-2.5 sm:px-4 sm:py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white font-bold text-xs flex items-center gap-2 transition-colors shadow-lg shadow-blue-900/20"><Play size={16} className="fill-white"/> <span className="hidden sm:inline">{dbLanguage === 'ar' ? 'تشغيل' : 'Play'}</span></button>
+                              <button onClick={() => removeHistoryItem(h.historyId)} className="p-2 sm:p-2.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"><X size={16} /></button>
                             </div>
                           </div>
                         ))}
@@ -472,222 +611,147 @@
                   </div>
                 )}
 
-                {/* --- Tab Content: Search & Favorites Grid View --- */}
-                {(activeTab === 'search' || activeTab === 'favorites') && (
+                {/* --- Content: Grid View (Discover, Search, Favorites) --- */}
+                {(activeTab === 'discover' || activeTab === 'search' || activeTab === 'favorites') && (
                   <div className="animate-in fade-in duration-300">
                     
-                    {/* Search Bar (Only in Search Tab) */}
+                    {/* Search Input */}
                     {activeTab === 'search' && (
-                      <div className="relative mb-6">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
-                        <input 
-                          dir="auto"
-                          type="text" 
-                          placeholder="Search by title (e.g. Breaking Bad) or IMDb ID (e.g. tt0903747)..."
-                          value={query}
-                          onChange={(e) => setQuery(e.target.value)}
-                          className="w-full bg-slate-900 border-2 border-slate-800 focus:border-indigo-500 rounded-2xl pl-12 pr-4 py-4 text-lg outline-none transition-all shadow-lg text-slate-100 placeholder:text-slate-600"
-                        />
+                      <div className="relative mb-6 mt-4">
+                        <Search className={`absolute ${dbLanguage === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-500`} size={20} />
+                        <input dir="auto" type="text" placeholder={dbLanguage === 'ar' ? 'البحث عن الأفلام والمسلسلات...' : 'Search movies and TV shows...'} value={query} onChange={handleSearchQueryChange} className={`w-full bg-slate-900 border-2 border-slate-800 focus:border-indigo-500 rounded-2xl ${dbLanguage === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-4 text-lg outline-none transition-all shadow-lg text-slate-100 placeholder:text-slate-600`} />
                       </div>
                     )}
 
-                    {/* Empty States / Loading / Errors */}
-                    {activeTab === 'search' && loading && (
-                      <div className="flex justify-center items-center py-12">
-                        <span className="text-indigo-400 animate-pulse font-medium flex items-center gap-2">
-                          <Database className="animate-spin" size={18} /> Cross-referencing global databases...
-                        </span>
-                      </div>
-                    )}
-                    
-                    {activeTab === 'search' && error && !loading && (
-                      <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-xl text-center font-medium">
-                        {error}
-                      </div>
-                    )}
-
+                    {/* Empty States */}
                     {activeTab === 'favorites' && displayItems.length === 0 && (
-                      <div className="text-center py-12 text-slate-500 border border-slate-800 border-dashed rounded-2xl mt-4">
-                        <Heart size={32} className="mx-auto mb-3 opacity-20" />
-                        <p>You haven't added any favorites yet.</p>
-                      </div>
+                      <div className="text-center py-12 text-slate-500 border border-slate-800 border-dashed rounded-2xl mt-4"><Heart size={32} className="mx-auto mb-3 opacity-20" /><p>{dbLanguage === 'ar' ? 'لم تقم بإضافة أي مفضلة بعد.' : "You haven't added any favorites yet."}</p></div>
+                    )}
+                    {activeTab === 'search' && displayItems.length === 0 && !loading && query && !error && (
+                       <div className="text-center py-8 text-slate-500">{dbLanguage === 'ar' ? 'لم يتم العثور على نتائج' : 'No results found for'} "{query}".</div>
                     )}
 
                     {/* Main Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                      {!loading && displayItems.map((item) => {
-                        const isFav = favorites.some(f => f.imdbID === item.imdbID);
+                      {displayItems.map((item) => {
+                        const isFav = favorites.some(f => f.id === item.id);
+                        const itemHistory = historyList.filter(h => h.id === item.id);
+                        const lastWatched = itemHistory.length > 0 ? itemHistory[0] : null;
 
                         return (
-                          <div key={item.imdbID} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-all flex flex-col shadow-lg">
+                          <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-all flex flex-col shadow-lg relative">
                             
                             {/* Card Header (Poster + Info) */}
-                            <div className="flex h-56">
+                            <div className="flex h-56 relative z-10">
                               <div className="w-1/3 min-w-[140px] bg-slate-950 relative overflow-hidden flex-shrink-0">
-                                {item.Poster && item.Poster !== "N/A" ? (
-                                  <img src={item.Poster} alt={item.Title} className="w-full h-full object-cover" />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-slate-700 bg-slate-800"><ImageIcon size={32} /></div>
-                                )}
-                                <div className={`absolute top-2 left-2 backdrop-blur-md border text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 font-bold uppercase tracking-wider shadow-lg
-                                  ${item.Type === 'series' ? 'bg-purple-900/80 border-purple-500/50 text-purple-300' : 'bg-blue-900/80 border-blue-500/50 text-blue-300'}`}>
-                                  {item.Type === 'series' ? <Tv size={10} /> : <Film size={10} />}
-                                  {item.Type}
+                                {item.Poster ? <img src={item.Poster} alt={item.Title} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-700 bg-slate-800"><ImageIcon size={32} /></div>}
+                                <div className={`absolute top-2 ${dbLanguage === 'ar' ? 'right-2' : 'left-2'} backdrop-blur-md border text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 font-bold uppercase tracking-wider shadow-lg ${item.Type === 'series' ? 'bg-purple-900/80 border-purple-500/50 text-purple-300' : 'bg-blue-900/80 border-blue-500/50 text-blue-300'}`}>
+                                  {item.Type === 'series' ? <Tv size={10} /> : <Film size={10} />} {item.Type === 'series' ? (dbLanguage === 'ar' ? 'مسلسل' : 'series') : (dbLanguage === 'ar' ? 'فيلم' : 'movie')}
                                 </div>
                               </div>
 
                               <div className="p-4 flex flex-col flex-grow">
                                 <h3 className="font-bold text-slate-100 leading-tight mb-1 line-clamp-2" title={item.Title}>{item.Title}</h3>
-                                <div className="flex items-center gap-3 text-xs text-slate-400 mb-3 font-medium">
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mb-3 font-medium">
                                   <span>{item.Year}</span>
-                                  {item.Runtime && item.Runtime !== "N/A" && <span className="flex items-center gap-1"><Clock size={12}/> {item.Runtime}</span>}
+                                  {item.Runtime && <span className="flex items-center gap-1"><Clock size={12}/> {item.Runtime}</span>}
+                                  {item.Rating && <span className="flex items-center gap-1 text-amber-400"><Star size={12} className="fill-amber-400" /> {item.Rating}</span>}
                                 </div>
                                 <p className="text-slate-500 text-xs line-clamp-3 leading-relaxed flex-grow">
-                                  {item.Plot && item.Plot !== "N/A" ? item.Plot : "No plot summary available."}
+                                  {item.Plot ? item.Plot : (dbLanguage === 'ar' ? 'لا توجد قصة متاحة.' : 'No plot summary available.')}
                                 </p>
 
                                 {/* Series Action Button */}
-                                {item.Type === 'series' && item.totalSeasons && item.totalSeasons !== "N/A" && (
-                                  <button 
-                                    onClick={() => handleToggleShow(item.imdbID, item.totalSeasons)}
-                                    className="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg text-xs font-semibold transition-colors border border-purple-500/20"
-                                  >
-                                    {expandedShow === item.imdbID ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
-                                    {expandedShow === item.imdbID ? "Hide Episodes" : `View Episodes (${item.totalSeasons} Seasons)`}
+                                {item.Type === 'series' && item.totalSeasons && (
+                                  <button onClick={() => handleToggleShow(item.id, item.totalSeasons)} className="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg text-xs font-semibold transition-colors border border-purple-500/20">
+                                    {expandedShow === item.id ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+                                    {expandedShow === item.id ? (dbLanguage === 'ar' ? 'إخفاء الحلقات' : 'Hide Episodes') : (dbLanguage === 'ar' ? `عرض الحلقات (${item.totalSeasons} مواسم)` : `View Episodes (${item.totalSeasons} Seasons)`)}
                                   </button>
                                 )}
                               </div>
                             </div>
 
-                            {/* The IMDb Index Footer & Action Buttons */}
-                            <div className="px-4 py-3 border-t border-slate-800 bg-slate-950/50 flex flex-wrap items-center justify-between gap-3">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Universal Index</span>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono text-indigo-400 text-xs">{item.imdbID}</span>
-                                  <a href={`https://www.imdb.com/title/${item.imdbID}/`} target="_blank" rel="noopener noreferrer" className="text-slate-500 hover:text-slate-300" title="View on IMDb"><ExternalLink size={12} /></a>
-                                </div>
+                            {/* Arabic Media Warning */}
+                            {item.OriginalLanguage === 'ar' && (
+                              <div className="px-4 py-2 bg-indigo-900/20 border-t border-indigo-500/20 flex items-start gap-2 text-indigo-400/80 text-[10px] relative z-10">
+                                <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                                <p>Tip: Try using the <strong>AutoEmbed</strong> or <strong>SmashyStream</strong> source for better Arabic media / subtitle coverage.</p>
+                              </div>
+                            )}
+
+                            {/* Action Buttons Footer */}
+                            <div className="px-4 py-3 border-t border-slate-800 bg-slate-950/80 flex flex-wrap items-center justify-between gap-3 relative z-10">
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => toggleFavorite(item)} className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold ${isFav ? 'bg-pink-500/10 text-pink-500 border border-pink-500/20 hover:bg-pink-500/20' : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700'}`}>
+                                  <Heart size={14} className={isFav ? "fill-current" : ""} /> <span className="hidden sm:inline">{isFav ? (dbLanguage === 'ar' ? 'محفوظ' : 'Saved') : (dbLanguage === 'ar' ? 'حفظ' : 'Save')}</span>
+                                </button>
+                                {item.imdbID && <a href={`https://www.imdb.com/title/${item.imdbID}/`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] bg-slate-800 text-slate-400 hover:text-white px-2 py-1.5 rounded-lg transition-colors"><ExternalLink size={12}/> IMDb</a>}
                               </div>
                               
                               <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => toggleFavorite(item)}
-                                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold ${isFav ? 'bg-pink-500/10 text-pink-500 border border-pink-500/20 hover:bg-pink-500/20' : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700'}`}
-                                >
-                                  <Heart size={14} className={isFav ? "fill-current" : ""} /> <span className="hidden sm:inline">{isFav ? 'Saved' : 'Save'}</span>
-                                </button>
-                                <button 
-                                  onClick={() => playMedia(item)}
-                                  className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-xs font-bold shadow-lg shadow-blue-900/20"
-                                >
-                                  <Play size={14} className="fill-white" /> Play
+                                {/* Continue Watching Highlight Button */}
+                                {lastWatched && item.Type === 'series' && (
+                                  <button onClick={() => playMedia(item, lastWatched.season, lastWatched.episode, lastWatched.epTitle)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-lg transition-colors text-xs font-bold" dir="ltr">
+                                    <PlayCircle size={14} /> Resume S{lastWatched.season} E{lastWatched.episode}
+                                  </button>
+                                )}
+                                
+                                <button onClick={() => playMedia(item)} className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-xs font-bold shadow-lg shadow-blue-900/20">
+                                  <Play size={14} className="fill-white" /> {dbLanguage === 'ar' ? 'تشغيل' : 'Play'}
                                 </button>
                               </div>
                             </div>
 
                             {/* Expanded TV Show Panel */}
-                            {expandedShow === item.imdbID && (
-                              <div className="bg-slate-950 border-t border-slate-800 animate-in slide-in-from-top-2 p-4">
-                                
+                            {expandedShow === item.id && (
+                              <div className="bg-slate-950 border-t border-slate-800 animate-in slide-in-from-top-2 p-4 relative z-10">
                                 <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
-                                  <span className="text-sm font-bold text-slate-300">Episodes List</span>
-                                  <select 
-                                    value={activeSeason}
-                                    onChange={(e) => {
-                                      setActiveSeason(e.target.value);
-                                      setExpandedEpisode(null);
-                                      fetchEpisodes(item.imdbID, e.target.value);
-                                    }}
-                                    className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none focus:border-purple-500 cursor-pointer"
-                                  >
-                                    {Array.from({ length: parseInt(item.totalSeasons) }, (_, i) => (
-                                      <option key={i + 1} value={i + 1}>Season {i + 1}</option>
-                                    ))}
+                                  <span className="text-sm font-bold text-slate-300">{dbLanguage === 'ar' ? 'قائمة الحلقات' : 'Episodes List'}</span>
+                                  <select value={activeSeason} onChange={(e) => { setActiveSeason(e.target.value); fetchEpisodes(item.id, e.target.value); }} className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none focus:border-purple-500 cursor-pointer" dir="ltr">
+                                    {Array.from({ length: parseInt(item.totalSeasons) }, (_, i) => (<option key={i + 1} value={i + 1}>Season {i + 1}</option>))}
                                   </select>
                                 </div>
 
                                 {episodesLoading ? (
-                                  <div className="text-center py-6 text-slate-500 text-xs animate-pulse">Fetching indexed episodes from OMDb...</div>
+                                  <div className="text-center py-6 text-slate-500 text-xs animate-pulse">Loading episodes...</div>
                                 ) : (
-                                  <div className="space-y-2 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                                  <div className="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                                     {episodesData && episodesData.length > 0 ? (
-                                      episodesData.map((ep) => (
-                                        <div key={ep.imdbID} className="flex flex-col p-3 bg-slate-900 rounded-lg border border-slate-800 hover:border-slate-700 transition-colors gap-3">
-                                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                            <div className="flex items-start sm:items-center gap-3 overflow-hidden">
-                                              <span className="text-slate-500 font-mono text-xs w-8 flex-shrink-0 text-center bg-slate-950 py-1 rounded">E{ep.Episode}</span>
-                                              <div className="flex flex-col min-w-0">
-                                                <span className="text-sm text-slate-200 font-medium line-clamp-1" title={ep.Title}>{ep.Title}</span>
-                                                <span className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
-                                                  <Calendar size={10} /> {ep.Released !== "N/A" ? ep.Released : "Unknown date"}
-                                                </span>
-                                              </div>
-                                            </div>
-                                            <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3">
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-[10px] text-slate-500 font-mono hidden md:inline-block">{ep.imdbID}</span>
-                                                {ep.imdbRating && ep.imdbRating !== "N/A" && (
-                                                  <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                                    ★ {ep.imdbRating}
-                                                  </span>
-                                                )}
-                                              </div>
-                                              <div className="flex items-center gap-2 flex-shrink-0">
-                                                <button 
-                                                  onClick={() => handleToggleEpisode(ep.imdbID)}
-                                                  className={`p-1.5 rounded transition-colors ${expandedEpisode === ep.imdbID ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'}`}
-                                                  title="Episode Info"
-                                                >
-                                                  <Info size={14} />
-                                                </button>
-                                                <button 
-                                                  onClick={() => playMedia(item, activeSeason, ep.Episode, ep.Title)}
-                                                  className="flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-600 hover:text-white text-blue-400 rounded transition-colors text-[10px] sm:text-xs font-bold uppercase tracking-wider"
-                                                >
-                                                  <Play size={10} className="fill-current" /> Play
+                                      episodesData.map((ep) => {
+                                        const epImage = ep.still_path ? `https://image.tmdb.org/t/p/w300${ep.still_path}` : null;
+                                        return (
+                                        <div key={ep.id} className="flex flex-col p-3 bg-slate-900 rounded-lg border border-slate-800 hover:border-slate-700 transition-colors gap-3">
+                                          <div className="flex flex-col sm:flex-row gap-3">
+                                            {/* Episode Thumbnail */}
+                                            {epImage ? (
+                                              <img src={epImage} alt={ep.name} className="w-full sm:w-28 h-20 object-cover rounded shadow bg-slate-800 flex-shrink-0" />
+                                            ) : (
+                                              <div className="w-full sm:w-28 h-20 rounded shadow bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-600"><Tv size={24}/></div>
+                                            )}
+                                            
+                                            <div className="flex flex-col min-w-0 flex-grow">
+                                              <div className="flex items-center justify-between gap-2">
+                                                <span className="text-sm text-slate-200 font-bold line-clamp-1">{ep.episode_number}. {ep.name}</span>
+                                                <button onClick={() => playMedia(item, activeSeason, ep.episode_number, ep.name)} className="flex items-center justify-center gap-1 px-3 py-1 bg-blue-500/10 hover:bg-blue-600 hover:text-white text-blue-400 rounded transition-colors text-[10px] font-bold uppercase tracking-wider flex-shrink-0">
+                                                  <Play size={10} className="fill-current" /> {dbLanguage === 'ar' ? 'تشغيل' : 'Play'}
                                                 </button>
                                               </div>
+                                              
+                                              <div className="flex items-center gap-3 mt-1 mb-2 text-[10px] text-slate-500" dir="ltr">
+                                                <span className="flex items-center gap-1"><Calendar size={10} /> {ep.air_date || "Unknown"}</span>
+                                                {ep.runtime && <span className="flex items-center gap-1"><Clock size={10} /> {ep.runtime} min</span>}
+                                                {ep.vote_average > 0 && <span className="font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded flex items-center gap-1">★ {ep.vote_average.toFixed(1)}</span>}
+                                              </div>
+                                              
+                                              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                                                {ep.overview || (dbLanguage === 'ar' ? 'لا توجد قصة لهذه الحلقة.' : 'No plot summary available for this episode.')}
+                                              </p>
                                             </div>
                                           </div>
-                                          
-                                          {/* Detailed Episode Info Panel */}
-                                          {expandedEpisode === ep.imdbID && (
-                                            <div className="mt-1 pt-3 border-t border-slate-800/60 text-xs text-slate-400 animate-in slide-in-from-top-1">
-                                              {fetchingEpisodeId === ep.imdbID ? (
-                                                <div className="flex items-center gap-2 text-indigo-400 py-1">
-                                                  <Database size={12} className="animate-spin" /> Retrieving episode details...
-                                                </div>
-                                              ) : episodeDetailsCache[ep.imdbID] ? (
-                                                <div className="space-y-2">
-                                                  <p className="leading-relaxed">
-                                                    <strong className="text-slate-300 font-medium">Plot: </strong> 
-                                                    {episodeDetailsCache[ep.imdbID].Plot && episodeDetailsCache[ep.imdbID].Plot !== "N/A" 
-                                                      ? episodeDetailsCache[ep.imdbID].Plot 
-                                                      : "No detailed plot available for this episode."}
-                                                  </p>
-                                                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[10px]">
-                                                    {episodeDetailsCache[ep.imdbID].Director && episodeDetailsCache[ep.imdbID].Director !== "N/A" && (
-                                                      <span><strong className="text-slate-500">Director:</strong> {episodeDetailsCache[ep.imdbID].Director}</span>
-                                                    )}
-                                                    {episodeDetailsCache[ep.imdbID].Runtime && episodeDetailsCache[ep.imdbID].Runtime !== "N/A" && (
-                                                      <span><strong className="text-slate-500">Runtime:</strong> {episodeDetailsCache[ep.imdbID].Runtime}</span>
-                                                    )}
-                                                    {episodeDetailsCache[ep.imdbID].Actors && episodeDetailsCache[ep.imdbID].Actors !== "N/A" && (
-                                                      <span className="w-full sm:w-auto"><strong className="text-slate-500">Starring:</strong> {episodeDetailsCache[ep.imdbID].Actors}</span>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              ) : (
-                                                <p className="text-amber-500/80 py-1">Failed to load episode details.</p>
-                                              )}
-                                            </div>
-                                          )}
                                         </div>
-                                      ))
+                                      )})
                                     ) : (
-                                      <div className="text-center text-xs text-slate-500 py-4">
-                                        No episodes found for this season.
-                                      </div>
+                                      <div className="text-center text-xs text-slate-500 py-4">{dbLanguage === 'ar' ? 'لم يتم العثور على حلقات.' : 'No episodes found.'}</div>
                                     )}
                                   </div>
                                 )}
@@ -698,6 +762,21 @@
                         );
                       })}
                     </div>
+                    
+                    {/* Pagination - Load More */}
+                    {(activeTab === 'discover' || activeTab === 'search') && results.length > 0 && (
+                       <div className="flex justify-center mt-8">
+                         {loading ? (
+                           <div className="text-indigo-400 animate-pulse font-medium text-sm flex items-center gap-2"><Database className="animate-spin" size={16} /> {dbLanguage === 'ar' ? 'جاري التحميل...' : 'Loading more...'}</div>
+                         ) : hasMore ? (
+                           <button onClick={() => setPage(p => p + 1)} className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl transition-colors font-bold text-sm shadow-lg" dir="ltr">
+                             {dbLanguage === 'ar' ? 'تحميل المزيد' : 'Load More'} <ChevronRight size={16} />
+                           </button>
+                         ) : (
+                           <div className="text-slate-500 text-sm">{dbLanguage === 'ar' ? 'نهاية النتائج.' : 'End of results.'}</div>
+                         )}
+                       </div>
+                    )}
                   </div>
                 )}
 

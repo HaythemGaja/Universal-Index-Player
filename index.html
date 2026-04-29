@@ -618,12 +618,14 @@
                 const [season, setSeason] = useState(1);
                 const [loading, setLoading] = useState(true);
                 const [showListMenu, setShowListMenu] = useState(false);
+                const [showTrailer, setShowTrailer] = useState(false); // NEW: Trailer state
 
                 const type = media.media_type || media.Type || (media.name ? 'tv' : 'movie');
 
                 useEffect(() => {
                     setLoading(true);
-                    fetch(`https://api.themoviedb.org/3/${type}/${media.id}?api_key=${tmdbKey}&language=${dbLanguage}&append_to_response=external_ids,credits`)
+                    // NEW: Appended "videos" to the fetch request
+                    fetch(`https://api.themoviedb.org/3/${type}/${media.id}?api_key=${tmdbKey}&language=${dbLanguage}&append_to_response=external_ids,credits,videos`)
                         .then(res => res.json()).then(data => {
                             setDetails(data);
                             if (type === 'tv' && data.seasons?.length > 0) {
@@ -657,15 +659,34 @@
                     if (nextEp) nextEpToPlay = nextEp;
                 }
 
+                // NEW: Find the official YouTube trailer
+                const trailer = details.videos?.results?.find(v => v.type === 'Trailer' && v.site === 'YouTube') || details.videos?.results?.find(v => v.site === 'YouTube');
+
                 return (
                     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 sm:p-4 animate-in fade-in" onClick={onClose}>
                         <div className="bg-[#181818] w-full sm:max-w-2xl sm:rounded-xl h-[85vh] sm:h-[80vh] overflow-y-auto hide-scrollbar relative shadow-2xl" onClick={e => e.stopPropagation()} dir={isRTL ? 'rtl' : 'ltr'}>
                             <button onClick={onClose} className={`absolute top-4 ${isRTL ? 'left-4' : 'right-4'} z-20 bg-neutral-900/60 p-2 rounded-full text-white hover:bg-neutral-800`}><X size={20} /></button>
-                            <div className="relative w-full aspect-video">
-                                <img src={`https://image.tmdb.org/t/p/w780${details.backdrop_path || details.poster_path}`} className="w-full h-full object-cover"/>
-                                <div className="absolute inset-0 modal-gradient flex items-end p-6">
-                                    <h2 className="text-3xl font-extrabold text-white">{details.title || details.name}</h2>
-                                </div>
+                            <div className="relative w-full aspect-video bg-black">
+                                {showTrailer && trailer ? (
+                                    <>
+                                        <iframe 
+                                            className="absolute inset-0 w-full h-full z-10" 
+                                            src={`https://www.youtube.com/embed/${trailer.key}?autoplay=1`} 
+                                            allow="autoplay; encrypted-media; fullscreen" 
+                                            allowFullScreen
+                                        ></iframe>
+                                        <button onClick={(e) => { e.stopPropagation(); setShowTrailer(false); }} className={`absolute top-4 ${isRTL ? 'right-4' : 'left-4'} z-20 bg-black/60 p-2 rounded-full text-white hover:bg-black/80 backdrop-blur-md`}>
+                                            <ArrowLeft size={20} className={isRTL ? 'rotate-180' : ''} />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <img src={`https://image.tmdb.org/t/p/w780${details.backdrop_path || details.poster_path}`} className="w-full h-full object-cover"/>
+                                )}
+                                {!showTrailer && (
+                                    <div className="absolute inset-0 modal-gradient flex items-end p-6 pointer-events-none">
+                                        <h2 className="text-3xl font-extrabold text-white">{details.title || details.name}</h2>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="p-4 sm:p-6 space-y-4">
@@ -678,15 +699,22 @@
                                     {type === 'tv' && <span>{details.number_of_seasons} Seasons</span>}
                                 </div>
 
-                                {type === 'movie' ? (
-                                    <button onClick={() => launchPlayer(details, null, null, null, details)} className="w-full flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
-                                        <Play size={20} className="fill-black" /> Play Movie
-                                    </button>
-                                ) : (
-                                    <button onClick={() => nextEpToPlay && launchPlayer(details, season, nextEpToPlay.episode_number, nextEpToPlay.name, details)} className="w-full flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
-                                        <Play size={20} className="fill-black" /> Resume S{season} E{nextEpToPlay?.episode_number || 1}
-                                    </button>
-                                )}
+                                <div className="flex gap-3">
+                                    {type === 'movie' ? (
+                                        <button onClick={() => launchPlayer(details, null, null, null, details)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
+                                            <Play size={20} className="fill-black" /> Play Movie
+                                        </button>
+                                    ) : (
+                                        <button onClick={() => nextEpToPlay && launchPlayer(details, season, nextEpToPlay.episode_number, nextEpToPlay.name, details)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
+                                            <Play size={20} className="fill-black" /> Resume S{season} E{nextEpToPlay?.episode_number || 1}
+                                        </button>
+                                    )}
+                                    {trailer && (
+                                        <button onClick={() => setShowTrailer(true)} className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 text-white py-2.5 rounded font-bold hover:bg-neutral-700 transition-colors shadow-lg border border-neutral-700">
+                                            <Film size={20} /> Trailer
+                                        </button>
+                                    )}
+                                </div>
 
                                 <p className="text-sm text-gray-200 leading-relaxed">{details.overview || 'No overview available.'}</p>
                                 

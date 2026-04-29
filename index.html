@@ -8,7 +8,6 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- NEW: Added HLS.js for native IPTV playback -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     
     <style>
@@ -36,7 +35,7 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useMemo, useRef } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
-        import { Play, Search, Film, Tv, Settings, Heart, History, Trash2, X, Server, ChevronDown, ChevronRight, PlayCircle, AlertCircle, Globe, Star, Cast, Info, Plus, Check, MonitorPlay, Home, Copy, CheckCheck, ArrowLeft, ExternalLink, KeySquare, Database } from 'https://esm.sh/lucide-react@0.292.0';
+        import { Play, Search, Film, Tv, Settings, Heart, History, Trash2, X, Server, ChevronDown, ChevronRight, PlayCircle, AlertCircle, Globe, Star, Cast, Info, Plus, Check, MonitorPlay, Home, Copy, CheckCheck, ArrowLeft, ExternalLink, KeySquare, Database, User, ListPlus, BarChart2, CheckCircle2, Circle, Share2, Clock, PieChart, Sparkles, Bell } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- Configurations ---
         const SERVERS = [
@@ -54,9 +53,7 @@
                 { title: 'Trending Today', url: '/trending/all/day' },
                 { title: 'Movies Trending Today', url: '/trending/movie/day' },
                 { title: 'TV Shows Trending Today', url: '/trending/tv/day' },
-                { title: 'Box Office', url: '/movie/now_playing' },
-                { title: 'Popular Movies', url: '/movie/popular' },
-                { title: 'Popular TV Shows', url: '/tv/popular' }
+                { title: 'Box Office', url: '/movie/now_playing' }
             ],
             movies: [
                 { title: 'Popular Movies', url: '/movie/popular' },
@@ -64,22 +61,21 @@
                 { title: 'Box Office', url: '/movie/now_playing' },
                 { title: 'Marvel Studios', url: '/discover/movie?with_companies=420&sort_by=popularity.desc' },
                 { title: 'Pixar', url: '/discover/movie?with_companies=3&sort_by=popularity.desc' },
-                { title: 'Warner Bros. Pictures', url: '/discover/movie?with_companies=174&sort_by=popularity.desc' },
-                { title: 'Walt Disney Pictures', url: '/discover/movie?with_companies=2&sort_by=popularity.desc' },
-                { title: 'DC Entertainment', url: '/discover/movie?with_companies=9993&sort_by=popularity.desc' },
-                { title: 'Paramount', url: '/discover/movie?with_companies=4&sort_by=popularity.desc' }
+                { title: 'Warner Bros.', url: '/discover/movie?with_companies=174&sort_by=popularity.desc' },
+                { title: 'Disney', url: '/discover/movie?with_companies=2&sort_by=popularity.desc' }
             ],
             tv: [
                 { title: 'Popular TV Shows', url: '/tv/popular' },
-                { title: 'All Time Favorite TV Shows', url: '/tv/top_rated' },
+                { title: 'All Time Favorites', url: '/tv/top_rated' },
                 { title: 'Netflix Originals', url: '/discover/tv?with_networks=213&sort_by=popularity.desc' },
                 { title: 'Apple TV+', url: '/discover/tv?with_networks=2552&sort_by=popularity.desc' },
                 { title: 'Amazon Prime', url: '/discover/tv?with_networks=1024&sort_by=popularity.desc' },
-                { title: 'Hulu', url: '/discover/tv?with_networks=453&sort_by=popularity.desc' },
-                { title: 'Disney+', url: '/discover/tv?with_networks=2739&sort_by=popularity.desc' },
-                { title: 'HBO', url: '/discover/tv?with_networks=49&sort_by=popularity.desc' },
-                { title: 'AMC', url: '/discover/tv?with_networks=174&sort_by=popularity.desc' }
+                { title: 'HBO', url: '/discover/tv?with_networks=49&sort_by=popularity.desc' }
             ]
+        };
+
+        const GENRE_MAP = {
+            28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime", 99: "Documentary", 18: "Drama", 10751: "Documentary", 10752: "Family", 14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music", 9648: "Mystery", 10749: "Romance", 878: "Science Fiction", 10770: "TV Movie", 53: "Thriller", 10759: "Action & Adventure", 10762: "Kids", 10763: "News", 10764: "Reality", 10765: "Sci-Fi & Fantasy", 10766: "Soap", 10767: "Talk", 10768: "War & Politics", 37: "Western"
         };
 
         const LoadingSpinner = () => (
@@ -96,20 +92,29 @@
             // IPTV State
             const [iptvDomain, setIptvDomain] = useState(() => localStorage.getItem('vaIptvDomain') || 'http://hydraa.st:80');
             const [iptvUser, setIptvUser] = useState(() => localStorage.getItem('vaIptvUser') || 'haithemb');
-            const [iptvPass, setIptvPass] = useState(() => localStorage.getItem('vaIptvPass') || 'haithemb');
-
+            const [iptvPass, setIptvPass] = useState(() => localStorage.getItem('vaIptvPass') || 'kse8328b');
             const [iptvCache, setIptvCache] = useState({ vod: [], series: [], loaded: false, error: null });
 
+            // Data State
             const [favorites, setFavorites] = useState(() => { try { return JSON.parse(localStorage.getItem('vaFavorites')) || []; } catch(e) { return []; } });
             const [historyList, setHistoryList] = useState(() => { try { return JSON.parse(localStorage.getItem('vaHistory')) || []; } catch(e) { return []; } });
+            
+            // NEW Tracking State
+            const [watchedEpisodes, setWatchedEpisodes] = useState(() => { try { return JSON.parse(localStorage.getItem('vaWatched')) || {}; } catch(e) { return {}; } });
+            const [customLists, setCustomLists] = useState(() => { try { return JSON.parse(localStorage.getItem('vaCustomLists')) || []; } catch(e) { return []; } });
 
+            // UI State
             const [activeTab, setActiveTab] = useState('home'); 
             const [seeAllConfig, setSeeAllConfig] = useState(null); 
             const [selectedMedia, setSelectedMedia] = useState(null); 
             const [activePlayerMedia, setActivePlayerMedia] = useState(null); 
 
+            // Save Effects
             useEffect(() => localStorage.setItem('vaFavorites', JSON.stringify(favorites)), [favorites]);
             useEffect(() => localStorage.setItem('vaHistory', JSON.stringify(historyList)), [historyList]);
+            useEffect(() => localStorage.setItem('vaWatched', JSON.stringify(watchedEpisodes)), [watchedEpisodes]);
+            useEffect(() => localStorage.setItem('vaCustomLists', JSON.stringify(customLists)), [customLists]);
+            
             useEffect(() => localStorage.setItem('vaServer', selectedServerId), [selectedServerId]);
             useEffect(() => localStorage.setItem('vaTmdbKey', tmdbKey), [tmdbKey]);
             useEffect(() => localStorage.setItem('vaLanguage', dbLanguage), [dbLanguage]);
@@ -117,27 +122,25 @@
             useEffect(() => localStorage.setItem('vaIptvUser', iptvUser), [iptvUser]);
             useEffect(() => localStorage.setItem('vaIptvPass', iptvPass), [iptvPass]);
 
+            const isRTL = dbLanguage === 'ar';
+
             // --- Background IPTV Fetcher ---
             useEffect(() => {
                 if (!iptvDomain || !iptvUser || !iptvPass) return;
-                
                 let isMounted = true;
                 setIptvCache({ vod: [], series: [], loaded: false, error: null });
-
                 const cleanDomain = iptvDomain.replace(/\/$/, '');
                 const baseUrl = `${cleanDomain}/player_api.php?username=${iptvUser}&password=${iptvPass}`;
 
                 const fetchIptvData = async (targetUrl) => {
-                    // ALWAYS try direct fetch first. Public proxies will crash on large IPTV databases (50MB+),
-                    // so the direct connection is heavily preferred and required for the main database.
-                    try {
-                        const res = await fetch(targetUrl, { mode: 'cors', headers: { 'Accept': 'application/json' } });
-                        if (res.ok) return await res.json();
-                    } catch(e) {
-                        console.log("Direct fetch failed, attempting proxies for fallback...", e);
+                    const isSecureEnv = window.location.protocol === 'https:';
+                    const isHttpTarget = targetUrl.startsWith('http://');
+                    if (!isSecureEnv || !isHttpTarget) {
+                        try {
+                            const res = await fetch(targetUrl);
+                            if (res.ok) return await res.json();
+                        } catch(e) {}
                     }
-
-                    // Proxies fallback (will likely fail for get_vod_streams due to payload size limits, but good for small requests)
                     const proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?'];
                     for (const proxy of proxies) {
                         try {
@@ -146,70 +149,78 @@
                             if (res.ok) return await res.json();
                         } catch (e) { continue; }
                     }
-                    
-                    const isSecureEnv = window.location.protocol === 'https:';
-                    const isHttpTarget = targetUrl.startsWith('http://');
-                    if (isSecureEnv && isHttpTarget) {
-                        throw new Error('HTTPS block');
-                    }
-                    throw new Error('All connections failed');
+                    throw new Error(isSecureEnv && isHttpTarget ? 'Canvas Blocked HTTP Request' : 'All connections failed');
                 };
 
                 Promise.all([
                     fetchIptvData(`${baseUrl}&action=get_vod_streams`),
                     fetchIptvData(`${baseUrl}&action=get_series`)
-                ])
-                .then(([vodData, seriesData]) => {
-                    if (isMounted) {
-                        setIptvCache({
-                            vod: Array.isArray(vodData) ? vodData : [],
-                            series: Array.isArray(seriesData) ? seriesData : [],
-                            loaded: true,
-                            error: null
-                        });
-                    }
-                })
-                .catch(err => {
-                    if (isMounted) {
-                        const errMsg = err.message === 'HTTPS block' 
-                            ? "HTTPS Website vs HTTP IPTV Blocked. Run locally or use a CORS extension." 
-                            : "Failed to connect to IPTV. Provider blocking direct access.";
-                        setIptvCache({ vod: [], series: [], loaded: false, error: errMsg });
-                    }
+                ]).then(([vodData, seriesData]) => {
+                    if (isMounted) setIptvCache({ vod: Array.isArray(vodData) ? vodData : [], series: Array.isArray(seriesData) ? seriesData : [], loaded: true, error: null });
+                }).catch(err => {
+                    if (isMounted) setIptvCache({ vod: [], series: [], loaded: false, error: err.message === 'Canvas Blocked HTTP Request' ? "Canvas blocks HTTP IPTV. Please save file locally to test." : "Failed to load database. Provider may be blocking proxy." });
                 });
-
                 return () => { isMounted = false; };
             }, [iptvDomain, iptvUser, iptvPass]);
 
-            const isRTL = dbLanguage === 'ar';
+            // --- Personalization Engine ---
+            const favoriteGenre = useMemo(() => {
+                const genreCounts = {};
+                historyList.forEach(item => {
+                    if (item.genres && Array.isArray(item.genres)) {
+                        item.genres.forEach(gId => { genreCounts[gId] = (genreCounts[gId] || 0) + 1; });
+                    }
+                });
+                const sorted = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]);
+                return sorted.length > 0 ? sorted[0][0] : null; // Returns ID of top genre
+            }, [historyList]);
 
-            // --- Handlers ---
+
+            // --- Core Handlers ---
             const openDetails = (media) => setSelectedMedia(media);
             const closeDetails = () => setSelectedMedia(null);
             
-            const launchPlayer = (item, season = null, episode = null, epTitle = null) => {
+            const markEpisodeWatched = (tmdbId, seasonNum, epNum, isWatched = true) => {
+                setWatchedEpisodes(prev => {
+                    const next = { ...prev };
+                    if (!next[tmdbId]) next[tmdbId] = {};
+                    if (!next[tmdbId][seasonNum]) next[tmdbId][seasonNum] = [];
+                    
+                    if (isWatched && !next[tmdbId][seasonNum].includes(epNum)) {
+                        next[tmdbId][seasonNum] = [...next[tmdbId][seasonNum], epNum];
+                    } else if (!isWatched) {
+                        next[tmdbId][seasonNum] = next[tmdbId][seasonNum].filter(e => e !== epNum);
+                    }
+                    return next;
+                });
+            };
+
+            const launchPlayer = (item, season = null, episode = null, epTitle = null, fullDetails = null) => {
                 const type = item.media_type || item.Type || (item.name ? 'tv' : 'movie');
 
                 setActivePlayerMedia({
-                    tmdbId: item.id,
-                    imdbId: item.imdbID || item.external_ids?.imdb_id,
-                    type: type === 'series' ? 'tv' : type,
-                    season,
-                    episode,
-                    title: item.title || item.name || item.Title,
-                    originalLanguage: item.original_language || item.OriginalLanguage
+                    tmdbId: item.id, imdbId: item.imdbID || item.external_ids?.imdb_id || fullDetails?.external_ids?.imdb_id,
+                    type: type === 'series' ? 'tv' : type, season, episode,
+                    title: item.title || item.name || item.Title, originalLanguage: item.original_language || item.OriginalLanguage
                 });
 
+                // Auto-Mark episode as watched
+                if (type === 'tv' || type === 'series') markEpisodeWatched(item.id, season, episode, true);
+
+                // Build rich history record for stats
                 const histId = `${item.id}-${season || '0'}-${episode || '0'}`;
+                const runtime = fullDetails?.runtime || (fullDetails?.episode_run_time?.[0]) || (type === 'movie' ? 120 : 45);
+                const genres = fullDetails?.genres?.map(g => g.id) || item.genre_ids || [];
+
                 const newRecord = {
                     historyId: histId, id: item.id, imdbID: item.imdbID || item.external_ids?.imdb_id,
                     Title: item.title || item.name || item.Title, Type: type,
                     Poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster,
                     backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : item.backdrop,
-                    season, episode, epTitle, timestamp: Date.now()
+                    season, episode, epTitle, timestamp: Date.now(),
+                    runtime, genres // Used for stats engine
                 };
-                setHistoryList(prev => [newRecord, ...prev.filter(h => h.historyId !== histId)].slice(0, 100));
-                
+                setHistoryList(prev => [newRecord, ...prev.filter(h => h.historyId !== histId)].slice(0, 500));
                 closeDetails();
             };
 
@@ -218,13 +229,31 @@
                     if (prev.some(f => f.id === item.id)) return prev.filter(f => f.id !== item.id);
                     return [{
                         id: item.id, Title: item.title || item.name, Type: item.media_type || (item.name ? 'tv' : 'movie'),
-                        Poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
-                        backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : null,
+                        Poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster,
+                        backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : item.backdrop,
                     }, ...prev];
                 });
             };
 
-            // --- Media Row Component ---
+            const createCustomList = (name) => {
+                if (!name.trim()) return;
+                setCustomLists(prev => [...prev, { id: Date.now().toString(), name, items: [] }]);
+            };
+
+            const toggleItemInList = (listId, item) => {
+                setCustomLists(prev => prev.map(list => {
+                    if (list.id !== listId) return list;
+                    const exists = list.items.some(i => i.id === item.id);
+                    let newItems = exists ? list.items.filter(i => i.id !== item.id) : [...list.items, {
+                        id: item.id, Title: item.title || item.name || item.Title, Type: item.media_type || (item.name ? 'tv' : 'movie'),
+                        Poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster,
+                        backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : item.backdrop
+                    }];
+                    return { ...list, items: newItems };
+                }));
+            };
+
+            // --- UI Components ---
             const MediaRow = ({ title, url, items, onSeeAll }) => {
                 const [rowItems, setRowItems] = useState(items || []);
                 const [loading, setLoading] = useState(!items);
@@ -232,10 +261,8 @@
                 useEffect(() => {
                     if (url && !items) {
                         fetch(`https://api.themoviedb.org/3${url}${url.includes('?') ? '&' : '?'}api_key=${tmdbKey}&language=${dbLanguage}`)
-                            .then(res => res.json())
-                            .then(data => {
-                                const valid = (data.results || []).filter(i => i.poster_path && !i.known_for);
-                                setRowItems(valid);
+                            .then(res => res.json()).then(data => {
+                                setRowItems((data.results || []).filter(i => i.poster_path && !i.known_for));
                                 setLoading(false);
                             }).catch(() => setLoading(false));
                     }
@@ -246,14 +273,17 @@
                 return (
                     <div className="mb-6">
                         <div className="flex justify-between items-end px-4 mb-2">
-                            <h2 className="text-base font-bold text-white tracking-wide">{title}</h2>
-                            <span onClick={() => onSeeAll && onSeeAll({title, url})} className="text-xs text-indigo-400 font-semibold cursor-pointer hover:underline">See All</span>
+                            <h2 className="text-base font-bold text-white tracking-wide flex items-center gap-2">
+                                {title === 'Recommended for You' && <Sparkles size={16} className="text-amber-400" />}
+                                {title}
+                            </h2>
+                            <span onClick={() => onSeeAll && onSeeAll({title, url: url || items})} className="text-xs text-indigo-400 font-semibold cursor-pointer hover:underline">See All</span>
                         </div>
                         <div className="flex overflow-x-auto gap-3 px-4 pb-2 hide-scrollbar snap-x">
                             {loading ? <div className="w-full flex gap-3">{[1,2,3,4,5].map(i => <div key={i} className="w-28 h-40 bg-[#1e1e1e] rounded-md flex-shrink-0 animate-pulse"></div>)}</div> : 
                                 rowItems.map(item => (
-                                    <div key={item.id || item.historyId} onClick={() => openDetails(item)} className="w-28 flex-shrink-0 cursor-pointer snap-start transition-transform hover:scale-105 relative">
-                                        <img src={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster} alt={item.title || item.name || item.Title} className="w-full h-40 object-cover rounded-md shadow-lg" loading="lazy" />
+                                    <div key={item.id} onClick={() => openDetails(item)} className="w-28 flex-shrink-0 cursor-pointer snap-start transition-transform hover:scale-105 relative">
+                                        <img src={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster} alt={item.title || item.name} className="w-full h-40 object-cover rounded-md shadow-lg" loading="lazy" />
                                         <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 backdrop-blur-md">
                                             <Star size={10} className="fill-amber-400 text-amber-400" /> {item.vote_average ? item.vote_average.toFixed(1) : 'NR'}
                                         </div>
@@ -267,28 +297,147 @@
 
             const ContinueWatchingRow = () => {
                 if (historyList.length === 0) return null;
+                const uniqueHistory = [];
+                const seenIds = new Set();
+                historyList.forEach(item => { if (!seenIds.has(item.id)) { seenIds.add(item.id); uniqueHistory.push(item); } });
+
                 return (
                     <div className="mb-6 mt-4">
                         <h2 className="text-base font-bold text-white tracking-wide px-4 mb-2">Continue Watching</h2>
                         <div className="flex overflow-x-auto gap-3 px-4 pb-2 hide-scrollbar snap-x">
-                            {historyList.map(item => (
-                                <div key={item.historyId} onClick={() => launchPlayer(item, item.season, item.episode, item.epTitle)} className="w-40 flex-shrink-0 cursor-pointer snap-start relative group">
+                            {uniqueHistory.slice(0, 15).map(item => {
+                                // Find next episode logic for UI
+                                const watchedData = watchedEpisodes[item.id] || {};
+                                let displaySeason = item.season;
+                                let displayEp = item.episode;
+                                let isWatched = false;
+                                
+                                if (item.Type === 'tv' && watchedData[item.season]?.includes(parseInt(item.episode))) {
+                                    isWatched = true; // Highlight that this specific ep was finished
+                                }
+
+                                return (
+                                <div key={item.historyId} onClick={() => openDetails(item)} className="w-40 flex-shrink-0 cursor-pointer snap-start relative group">
                                     <div className="relative w-full aspect-video rounded-md overflow-hidden bg-neutral-800 border border-neutral-700">
-                                        <img src={item.backdrop || item.Poster} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" alt={item.Title} />
+                                        <img src={item.backdrop || item.Poster} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
                                         <div className="absolute inset-0 flex items-center justify-center">
                                             <PlayCircle size={36} className="text-white shadow-xl opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all" />
                                         </div>
-                                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-700"><div className="h-full bg-indigo-500 w-2/3"></div></div>
+                                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-700">
+                                            <div className={`h-full ${isWatched ? 'bg-green-500 w-full' : 'bg-indigo-500 w-2/3'}`}></div>
+                                        </div>
                                     </div>
                                     <div className="mt-1 flex justify-between items-start">
                                         <div className="flex flex-col">
                                             <span className="text-xs font-semibold text-gray-200 line-clamp-1">{item.Title}</span>
-                                            <span className="text-[10px] text-gray-400">{item.Type === 'tv' ? `S${item.season}:E${item.episode}` : 'Movie'}</span>
+                                            <span className="text-[10px] text-gray-400">{item.Type === 'tv' ? `S${displaySeason}:E${displayEp}` : 'Movie'} {isWatched && '✓'}</span>
                                         </div>
-                                        <button onClick={(e) => { e.stopPropagation(); openDetails(item); }} className="p-1 text-gray-400 hover:text-white"><Info size={14}/></button>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            };
+
+            const NewEpisodesRow = () => {
+                const [showsWithNewEps, setShowsWithNewEps] = useState([]);
+                const [loading, setLoading] = useState(true);
+
+                useEffect(() => {
+                    const fetchNewEpisodes = async () => {
+                        setLoading(true);
+                        try {
+                            const tvShows = new Map();
+                            // Collect unique TV shows from Watchlist and Custom Lists
+                            favorites.forEach(item => { if (item.Type === 'tv' || item.Type === 'series') tvShows.set(item.id, item); });
+                            customLists.forEach(list => list.items.forEach(item => { if (item.Type === 'tv' || item.Type === 'series') tvShows.set(item.id, item); }));
+
+                            if (tvShows.size === 0) {
+                                setLoading(false);
+                                return;
+                            }
+
+                            // Fetch details for all collected TV shows
+                            const promises = Array.from(tvShows.keys()).map(id =>
+                                fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${tmdbKey}&language=${dbLanguage}`).then(res => res.ok ? res.json() : null)
+                            );
+                            const details = await Promise.all(promises);
+
+                            const newEpsList = [];
+                            const sixtyDaysAgo = new Date();
+                            sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+                            const today = new Date();
+
+                            details.forEach(show => {
+                                if (!show || !show.last_episode_to_air) return;
+                                
+                                const lastEp = show.last_episode_to_air;
+                                if (!lastEp.air_date) return;
+                                
+                                const airDate = new Date(lastEp.air_date);
+
+                                // Check if episode aired in the last 60 days, and has actually aired (not in the future)
+                                if (airDate >= sixtyDaysAgo && airDate <= today) {
+                                    // Check if the episode is marked as watched
+                                    const isWatched = watchedEpisodes[show.id]?.[lastEp.season_number]?.includes(lastEp.episode_number);
+                                    
+                                    if (!isWatched) {
+                                        newEpsList.push({
+                                            ...tvShows.get(show.id),
+                                            Title: show.name, // Ensure we have the latest localized title
+                                            backdrop: show.backdrop_path ? `https://image.tmdb.org/t/p/w780${show.backdrop_path}` : null,
+                                            Poster: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null,
+                                            newEpInfo: lastEp
+                                        });
+                                    }
+                                }
+                            });
+
+                            // Sort by most recent air date
+                            newEpsList.sort((a, b) => new Date(b.newEpInfo.air_date) - new Date(a.newEpInfo.air_date));
+                            setShowsWithNewEps(newEpsList);
+                        } catch (e) {
+                            console.error("Failed to fetch new episodes", e);
+                        }
+                        setLoading(false);
+                    };
+
+                    fetchNewEpisodes();
+                }, [favorites, customLists, watchedEpisodes, tmdbKey, dbLanguage]);
+
+                if (!loading && showsWithNewEps.length === 0) return null;
+
+                return (
+                    <div className="mb-6 mt-4">
+                        <div className="flex justify-between items-end px-4 mb-2">
+                            <h2 className="text-base font-bold text-white tracking-wide flex items-center gap-2">
+                                <Bell size={16} className="text-red-500" /> New Episodes for You
+                            </h2>
+                        </div>
+                        <div className="flex overflow-x-auto gap-3 px-4 pb-2 hide-scrollbar snap-x">
+                            {loading ? (
+                                <div className="w-full flex gap-3">{[1,2,3].map(i => <div key={i} className="w-40 aspect-video bg-[#1e1e1e] rounded-md flex-shrink-0 animate-pulse"></div>)}</div>
+                            ) : (
+                                showsWithNewEps.map(item => (
+                                    <div key={item.id} onClick={() => openDetails(item)} className="w-40 flex-shrink-0 cursor-pointer snap-start relative group">
+                                        <div className="relative w-full aspect-video rounded-md overflow-hidden bg-neutral-800 border border-red-500/40">
+                                            <img src={item.newEpInfo.still_path ? `https://image.tmdb.org/t/p/w300${item.newEpInfo.still_path}` : item.backdrop || item.Poster} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <PlayCircle size={36} className="text-white shadow-xl opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all" />
+                                            </div>
+                                            <div className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow flex items-center gap-1"><Sparkles size={8}/> NEW</div>
+                                        </div>
+                                        <div className="mt-1 flex justify-between items-start">
+                                            <div className="flex flex-col">
+                                                <span className="text-xs font-semibold text-gray-200 line-clamp-1">{item.Title}</span>
+                                                <span className="text-[10px] text-red-400 font-medium">S{item.newEpInfo.season_number} E{item.newEpInfo.episode_number} &bull; {new Date(item.newEpInfo.air_date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
                 );
@@ -301,11 +450,13 @@
                 const [hasMore, setHasMore] = useState(true);
 
                 useEffect(() => {
+                    if (Array.isArray(config.url)) {
+                        setItems(config.url); setHasMore(false); return; // Local array passed
+                    }
                     setLoading(true);
                     const sep = config.url.includes('?') ? '&' : '?';
                     fetch(`https://api.themoviedb.org/3${config.url}${sep}api_key=${tmdbKey}&language=${dbLanguage}&page=${page}`)
-                        .then(res => res.json())
-                        .then(data => {
+                        .then(res => res.json()).then(data => {
                             const valid = (data.results || []).filter(i => i.poster_path && !i.known_for);
                             setItems(prev => page === 1 ? valid : [...prev, ...valid]);
                             setHasMore(data.page < data.total_pages);
@@ -316,15 +467,14 @@
                 return (
                     <div className="pt-8 pb-24 px-4 max-w-5xl mx-auto min-h-screen animate-in fade-in" dir={isRTL ? 'rtl' : 'ltr'}>
                         <div className="flex items-center gap-4 mb-6 sticky top-0 bg-[#0f0f0f]/90 backdrop-blur-md py-4 z-20">
-                            <button onClick={onBack} className="p-2 bg-[#1e1e1e] hover:bg-[#2b2b2b] rounded-full transition-colors">
-                                <ArrowLeft size={20} className={isRTL ? "rotate-180" : ""}/>
-                            </button>
+                            <button onClick={onBack} className="p-2 bg-[#1e1e1e] hover:bg-[#2b2b2b] rounded-full transition-colors"><ArrowLeft size={20} className={isRTL ? "rotate-180" : ""}/></button>
                             <h1 className="text-xl font-bold">{config.title}</h1>
                         </div>
+                        {items.length === 0 && !loading && <div className="text-center text-gray-500 py-10">This list is empty.</div>}
                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4">
                             {items.map(item => (
                                 <div key={item.id} onClick={() => openDetails(item)} className="cursor-pointer transition-transform hover:scale-105 relative">
-                                    <img src={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster} alt={item.title || item.name} className="w-full aspect-[2/3] object-cover rounded-md shadow-lg" loading="lazy" />
+                                    <img src={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster} className="w-full aspect-[2/3] object-cover rounded-md shadow-lg" loading="lazy" />
                                     <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 backdrop-blur-md">
                                         <Star size={10} className="fill-amber-400 text-amber-400" /> {item.vote_average ? item.vote_average.toFixed(1) : 'NR'}
                                     </div>
@@ -334,7 +484,7 @@
                         {hasMore && (
                             <div className="mt-8 flex justify-center">
                                 <button onClick={() => setPage(p => p + 1)} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded font-bold transition-colors disabled:opacity-50">
-                                    {loading ? (isRTL ? 'جاري التحميل...' : 'Loading...') : (isRTL ? 'تحميل المزيد' : 'Load More')}
+                                    {loading ? 'Loading...' : 'Load More'}
                                 </button>
                             </div>
                         )}
@@ -344,27 +494,23 @@
 
             const HeroBanner = ({ endpoint }) => {
                 const [heroItem, setHeroItem] = useState(null);
-                
                 useEffect(() => {
                     fetch(`https://api.themoviedb.org/3${endpoint}?api_key=${tmdbKey}&language=${dbLanguage}`)
-                        .then(res => res.json())
-                        .then(data => {
+                        .then(res => res.json()).then(data => {
                             const valid = data.results?.find(i => i.backdrop_path && i.overview);
                             setHeroItem(valid || data.results?.[0]);
                         });
                 }, [endpoint, tmdbKey, dbLanguage]);
 
                 if (!heroItem) return <div className="h-[60vh] w-full bg-neutral-900 animate-pulse"></div>;
-
                 const isFav = favorites.some(f => f.id === heroItem.id);
 
                 return (
                     <div className="relative w-full h-[65vh] sm:h-[75vh] flex flex-col justify-end pb-12">
                         <div className="absolute inset-0 z-0">
-                            <img src={`https://image.tmdb.org/t/p/original${heroItem.backdrop_path || heroItem.poster_path}`} className="w-full h-full object-cover" alt="Hero" />
+                            <img src={`https://image.tmdb.org/t/p/original${heroItem.backdrop_path || heroItem.poster_path}`} className="w-full h-full object-cover" />
                             <div className="absolute inset-0 hero-gradient"></div>
                         </div>
-                        
                         <div className="relative z-10 px-4 sm:px-8 flex flex-col items-center text-center space-y-4">
                             <h1 className="text-3xl sm:text-5xl font-extrabold text-white drop-shadow-lg">{heroItem.title || heroItem.name}</h1>
                             <div className="flex items-center gap-2 text-xs font-semibold text-gray-300">
@@ -373,17 +519,14 @@
                                 <span>{(heroItem.release_date || heroItem.first_air_date || '').substring(0,4)}</span>
                                 <span className="border border-gray-600 px-1 rounded text-[10px]">HD</span>
                             </div>
-                            
                             <div className="flex items-center justify-center gap-4 w-full max-w-sm mt-2">
                                 <button onClick={() => toggleFavorite(heroItem)} className="flex flex-col items-center gap-1 text-gray-300 hover:text-white transition-colors">
                                     {isFav ? <Check size={24} /> : <Plus size={24} />}
-                                    <span className="text-[10px] font-medium">My List</span>
+                                    <span className="text-[10px] font-medium">Watchlist</span>
                                 </button>
-                                
                                 <button onClick={() => openDetails(heroItem)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
                                     <Play size={20} className="fill-black" /> Play
                                 </button>
-                                
                                 <button onClick={() => openDetails(heroItem)} className="flex flex-col items-center gap-1 text-gray-300 hover:text-white transition-colors">
                                     <Info size={24} />
                                     <span className="text-[10px] font-medium">Info</span>
@@ -399,18 +542,19 @@
                 const [episodes, setEpisodes] = useState([]);
                 const [season, setSeason] = useState(1);
                 const [loading, setLoading] = useState(true);
+                const [showListMenu, setShowListMenu] = useState(false);
 
                 const type = media.media_type || media.Type || (media.name ? 'tv' : 'movie');
 
                 useEffect(() => {
                     setLoading(true);
                     fetch(`https://api.themoviedb.org/3/${type}/${media.id}?api_key=${tmdbKey}&language=${dbLanguage}&append_to_response=external_ids`)
-                        .then(res => res.json())
-                        .then(data => {
+                        .then(res => res.json()).then(data => {
                             setDetails(data);
                             if (type === 'tv' && data.seasons?.length > 0) {
-                                const firstSeason = data.seasons.find(s => s.season_number > 0)?.season_number || 1;
-                                setSeason(firstSeason);
+                                const watchedS = Object.keys(watchedEpisodes[media.id] || {}).pop(); // Try to resume last watched season
+                                const targetSeason = watchedS ? parseInt(watchedS) : (data.seasons.find(s => s.season_number > 0)?.season_number || 1);
+                                setSeason(targetSeason);
                             } else {
                                 setLoading(false);
                             }
@@ -419,29 +563,31 @@
 
                 useEffect(() => {
                     if (type === 'tv' && details) {
+                        setLoading(true);
                         fetch(`https://api.themoviedb.org/3/tv/${media.id}/season/${season}?api_key=${tmdbKey}&language=${dbLanguage}`)
-                            .then(res => res.json())
-                            .then(data => {
-                                setEpisodes(data.episodes || []);
-                                setLoading(false);
-                            });
+                            .then(res => res.json()).then(data => { setEpisodes(data.episodes || []); setLoading(false); });
                     }
                 }, [season, details, media.id, type, tmdbKey, dbLanguage]);
 
                 if (!details) return <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"><LoadingSpinner/></div>;
 
                 const isFav = favorites.some(f => f.id === details.id);
+                const showWatchedMap = watchedEpisodes[details.id] || {};
+
+                // Next Episode Logic
+                let nextEpToPlay = episodes[0];
+                if (type === 'tv' && showWatchedMap[season]) {
+                    const watchedInSeason = showWatchedMap[season];
+                    const nextEp = episodes.find(e => !watchedInSeason.includes(e.episode_number));
+                    if (nextEp) nextEpToPlay = nextEp;
+                }
 
                 return (
                     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 sm:p-4 animate-in fade-in" onClick={onClose}>
                         <div className="bg-[#181818] w-full sm:max-w-2xl sm:rounded-xl h-[85vh] sm:h-[80vh] overflow-y-auto hide-scrollbar relative shadow-2xl" onClick={e => e.stopPropagation()} dir={isRTL ? 'rtl' : 'ltr'}>
-                            
-                            <button onClick={onClose} className={`absolute top-4 ${isRTL ? 'left-4' : 'right-4'} z-20 bg-neutral-900/60 p-2 rounded-full text-white hover:bg-neutral-800`}>
-                                <X size={20} />
-                            </button>
-
+                            <button onClick={onClose} className={`absolute top-4 ${isRTL ? 'left-4' : 'right-4'} z-20 bg-neutral-900/60 p-2 rounded-full text-white hover:bg-neutral-800`}><X size={20} /></button>
                             <div className="relative w-full aspect-video">
-                                <img src={`https://image.tmdb.org/t/p/w780${details.backdrop_path || details.poster_path}`} className="w-full h-full object-cover" alt="Backdrop"/>
+                                <img src={`https://image.tmdb.org/t/p/w780${details.backdrop_path || details.poster_path}`} className="w-full h-full object-cover"/>
                                 <div className="absolute inset-0 modal-gradient flex items-end p-6">
                                     <h2 className="text-3xl font-extrabold text-white">{details.title || details.name}</h2>
                                 </div>
@@ -458,25 +604,47 @@
                                 </div>
 
                                 {type === 'movie' ? (
-                                    <button onClick={() => launchPlayer(details)} className="w-full flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
+                                    <button onClick={() => launchPlayer(details, null, null, null, details)} className="w-full flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
                                         <Play size={20} className="fill-black" /> Play Movie
                                     </button>
                                 ) : (
-                                    <button onClick={() => {
-                                        const ep = episodes[0];
-                                        if (ep) launchPlayer(details, season, ep.episode_number, ep.name);
-                                    }} className="w-full flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
-                                        <Play size={20} className="fill-black" /> Play S{season} E1
+                                    <button onClick={() => nextEpToPlay && launchPlayer(details, season, nextEpToPlay.episode_number, nextEpToPlay.name, details)} className="w-full flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
+                                        <Play size={20} className="fill-black" /> Resume S{season} E{nextEpToPlay?.episode_number || 1}
                                     </button>
                                 )}
 
                                 <p className="text-sm text-gray-200 leading-relaxed">{details.overview || 'No overview available.'}</p>
                                 
-                                <div className="flex gap-6 mt-4 pb-4 border-b border-gray-800">
+                                {/* Tracking Controls */}
+                                <div className="flex gap-6 mt-4 pb-4 border-b border-gray-800 relative">
                                     <button onClick={() => toggleFavorite(details)} className="flex flex-col items-center gap-2 text-gray-400 hover:text-white">
                                         {isFav ? <Check size={24} className="text-white"/> : <Plus size={24} />}
-                                        <span className="text-[10px]">My List</span>
+                                        <span className="text-[10px]">Watchlist</span>
                                     </button>
+                                    
+                                    <button onClick={() => setShowListMenu(!showListMenu)} className="flex flex-col items-center gap-2 text-gray-400 hover:text-white">
+                                        <ListPlus size={24} />
+                                        <span className="text-[10px]">Add to List</span>
+                                    </button>
+
+                                    {/* Dropdown for Custom Lists */}
+                                    {showListMenu && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setShowListMenu(false)}></div>
+                                            <div className="absolute top-full left-16 mt-2 w-48 bg-[#2b2b2b] border border-gray-700 rounded-lg shadow-2xl overflow-hidden z-50">
+                                                <div className="p-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-700">Save to...</div>
+                                                {customLists.length === 0 ? (
+                                                    <div className="p-3 text-xs text-gray-500">No custom lists. Create one in your Profile tab.</div>
+                                                ) : customLists.map(list => {
+                                                    const inList = list.items.some(i => i.id === details.id);
+                                                    return (
+                                                    <button key={list.id} onClick={() => toggleItemInList(list.id, details)} className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700 hover:text-white">
+                                                        {list.name} {inList && <CheckCircle2 size={14} className="text-indigo-400"/>}
+                                                    </button>
+                                                )})}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 {type === 'tv' && (
@@ -492,23 +660,30 @@
 
                                         {loading ? <LoadingSpinner/> : (
                                             <div className="space-y-4">
-                                                {episodes.map(ep => (
-                                                    <div key={ep.id} onClick={() => launchPlayer(details, season, ep.episode_number, ep.name)} className="flex gap-4 p-2 hover:bg-neutral-800 rounded-lg cursor-pointer group transition-colors">
-                                                        <div className="relative w-32 aspect-video flex-shrink-0 rounded overflow-hidden bg-neutral-800">
-                                                            {ep.still_path && <img src={`https://image.tmdb.org/t/p/w300${ep.still_path}`} className="w-full h-full object-cover opacity-80 group-hover:opacity-100" alt={ep.name}/>}
+                                                {episodes.map(ep => {
+                                                    const isEpWatched = showWatchedMap[season]?.includes(ep.episode_number);
+                                                    return (
+                                                    <div key={ep.id} className="flex gap-4 p-2 hover:bg-neutral-800 rounded-lg group transition-colors relative">
+                                                        <div onClick={() => launchPlayer(details, season, ep.episode_number, ep.name, details)} className="relative w-32 aspect-video flex-shrink-0 rounded overflow-hidden bg-neutral-800 cursor-pointer">
+                                                            {ep.still_path && <img src={`https://image.tmdb.org/t/p/w300${ep.still_path}`} className={`w-full h-full object-cover ${isEpWatched ? 'opacity-40' : 'opacity-80 group-hover:opacity-100'}`} />}
                                                             <div className="absolute inset-0 flex items-center justify-center">
                                                                 <PlayCircle size={28} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                                             </div>
+                                                            {isEpWatched && <div className="absolute bottom-0 left-0 right-0 h-1 bg-green-500"></div>}
                                                         </div>
                                                         <div className="flex flex-col justify-center flex-grow min-w-0">
                                                             <div className="flex justify-between items-start mb-1">
-                                                                <span className="text-sm font-bold text-white line-clamp-1">{ep.episode_number}. {ep.name}</span>
-                                                                {ep.runtime && <span className="text-xs text-gray-500">{ep.runtime}m</span>}
+                                                                <span onClick={() => launchPlayer(details, season, ep.episode_number, ep.name, details)} className={`text-sm font-bold line-clamp-1 cursor-pointer hover:underline ${isEpWatched ? 'text-gray-500' : 'text-white'}`}>{ep.episode_number}. {ep.name}</span>
+                                                                
+                                                                {/* Mark as watched toggle button */}
+                                                                <button onClick={() => markEpisodeWatched(details.id, season, ep.episode_number, !isEpWatched)} className="text-gray-500 hover:text-white p-1" title={isEpWatched ? "Mark as unseen" : "Mark as watched"}>
+                                                                    {isEpWatched ? <CheckCircle2 size={18} className="text-green-500"/> : <Circle size={18} />}
+                                                                </button>
                                                             </div>
-                                                            <p className="text-xs text-gray-400 line-clamp-2">{ep.overview}</p>
+                                                            <p className={`text-xs line-clamp-2 ${isEpWatched ? 'text-gray-600' : 'text-gray-400'}`}>{ep.overview}</p>
                                                         </div>
                                                     </div>
-                                                ))}
+                                                )})}
                                             </div>
                                         )}
                                     </div>
@@ -519,23 +694,18 @@
                 );
             };
 
-            // --- Fullscreen Player Overlay ---
             const PlayerOverlay = () => {
                 const [showSettings, setShowSettings] = useState(false);
                 const [showCastGuide, setShowCastGuide] = useState(false);
                 const [copied, setCopied] = useState(false);
-                
                 const [iptvStreamId, setIptvStreamId] = useState('');
                 const [autoSearchStatus, setAutoSearchStatus] = useState('idle'); 
                 const [streamStatus, setStreamStatus] = useState('checking'); 
-                
                 const videoRef = useRef(null);
 
                 if (!activePlayerMedia) return null;
-
                 const isIptv = selectedServerId === 'iptv';
 
-                // --- Background Auto Search for IPTV ---
                 useEffect(() => {
                     setIptvStreamId('');
                     setAutoSearchStatus('idle');
@@ -543,30 +713,18 @@
 
                 useEffect(() => {
                     if (!isIptv || !iptvCache.loaded || iptvStreamId || !activePlayerMedia) return;
-
                     const normalize = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
                     const targetName = normalize(activePlayerMedia.title);
-                    
                     setAutoSearchStatus('searching');
 
                     if (activePlayerMedia.type === 'movie') {
-                        const match = iptvCache.vod.find(item => normalize(item.name) === targetName) || 
-                                      iptvCache.vod.find(item => normalize(item.name).includes(targetName));
-                        if (match) {
-                            const ext = match.container_extension || 'mp4';
-                            setIptvStreamId(`${match.stream_id}.${ext}`);
-                            setAutoSearchStatus('found');
-                        } else {
-                            setAutoSearchStatus('not_found');
-                        }
+                        const match = iptvCache.vod.find(item => normalize(item.name) === targetName) || iptvCache.vod.find(item => normalize(item.name).includes(targetName));
+                        if (match) { setIptvStreamId(`${match.stream_id}.${match.container_extension || 'mp4'}`); setAutoSearchStatus('found'); } else { setAutoSearchStatus('not_found'); }
                     } else if (activePlayerMedia.type === 'tv') {
-                        const match = iptvCache.series.find(item => normalize(item.name) === targetName) || 
-                                      iptvCache.series.find(item => normalize(item.name).includes(targetName));
-                        
+                        const match = iptvCache.series.find(item => normalize(item.name) === targetName) || iptvCache.series.find(item => normalize(item.name).includes(targetName));
                         if (match) {
                             const cleanDomain = iptvDomain.replace(/\/$/, '');
                             const url = `${cleanDomain}/player_api.php?username=${iptvUser}&password=${iptvPass}&action=get_series_info&series_id=${match.series_id}`;
-                            
                             const fetchSeriesInfo = async () => {
                                 try {
                                     let data = null;
@@ -574,171 +732,84 @@
                                     for (const proxy of proxies) {
                                         try {
                                             const fetchUrl = proxy ? `${proxy}${encodeURIComponent(url)}` : url;
-                                            const fetchOptions = proxy ? { cache: 'no-store' } : { mode: 'cors', headers: { 'Accept': 'application/json' } };
-                                            const res = await fetch(fetchUrl, fetchOptions);
+                                            const res = await fetch(fetchUrl, { cache: 'no-store' });
                                             if (res.ok) { data = await res.json(); break; }
                                         } catch (e) { continue; }
                                     }
-                                    if (!data) throw new Error('Failed to fetch series info');
-                                    
+                                    if (!data) throw new Error();
                                     const seasonData = data?.episodes?.[activePlayerMedia.season];
                                     if (seasonData && Array.isArray(seasonData)) {
                                         const ep = seasonData.find(e => parseInt(e.episode_num) === parseInt(activePlayerMedia.episode));
-                                        if (ep && ep.id) {
-                                            const ext = ep.container_extension || 'mp4';
-                                            setIptvStreamId(`${ep.id}.${ext}`);
-                                            setAutoSearchStatus('found');
-                                            return;
-                                        }
+                                        if (ep && ep.id) { setIptvStreamId(`${ep.id}.${ep.container_extension || 'mp4'}`); setAutoSearchStatus('found'); return; }
                                     }
                                     setAutoSearchStatus('not_found');
-                                } catch (err) {
-                                    setAutoSearchStatus('not_found');
-                                }
+                                } catch (err) { setAutoSearchStatus('not_found'); }
                             };
                             fetchSeriesInfo();
-                        } else {
-                            setAutoSearchStatus('not_found');
-                        }
+                        } else { setAutoSearchStatus('not_found'); }
                     }
                 }, [selectedServerId, iptvCache.loaded, activePlayerMedia, iptvStreamId, isIptv, iptvDomain, iptvPass, iptvUser]);
 
-                // Dynamic URL calculation instantly based on selectedServerId
                 const activeUrl = useMemo(() => {
                     if (isIptv) {
                         if (!iptvStreamId || !iptvDomain || !iptvUser || !iptvPass) return '';
                         const typePath = activePlayerMedia.type === 'tv' ? 'series' : 'movie';
-                        const cleanDomain = iptvDomain.replace(/\/$/, '');
-                        
-                        // Default to .mp4 if manual input doesn't include an extension
                         let streamPath = String(iptvStreamId);
                         if (!streamPath.includes('.')) streamPath += '.mp4';
-                        
-                        return `${cleanDomain}/${typePath}/${iptvUser}/${iptvPass}/${streamPath}`;
+                        return `${iptvDomain.replace(/\/$/, '')}/${typePath}/${iptvUser}/${iptvPass}/${streamPath}`;
                     }
-                    
                     const server = SERVERS.find(s => s.id === selectedServerId) || SERVERS[0];
                     return server.getUrl(activePlayerMedia.type, activePlayerMedia.tmdbId, activePlayerMedia.imdbId, activePlayerMedia.season, activePlayerMedia.episode);
                 }, [activePlayerMedia, selectedServerId, isIptv, iptvStreamId, iptvDomain, iptvUser, iptvPass]);
 
-                // Test Channel using no-cors snippet
-                const testChannel = async (url) => {
-                    if (!url) return false;
-                    try {
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 5000);
-                        await fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-cache', signal: controller.signal });
-                        clearTimeout(timeoutId);
-                        return true;
-                    } catch (error) {
-                        return false;
-                    }
-                };
-
-                // Trigger test when URL changes
                 useEffect(() => {
                     if (activeUrl && isIptv && iptvStreamId) {
                         setStreamStatus('checking');
-                        testChannel(activeUrl).then(isOnline => {
-                            setStreamStatus(isOnline ? 'online' : 'offline');
-                        });
+                        const controller = new AbortController();
+                        fetch(activeUrl, { method: 'HEAD', mode: 'no-cors', cache: 'no-cache', signal: controller.signal })
+                            .then(() => setStreamStatus('online')).catch(() => setStreamStatus('offline'));
+                        setTimeout(() => controller.abort(), 5000);
+                        return () => controller.abort();
                     } else if (activeUrl && !isIptv) {
                         setStreamStatus('online'); 
                     }
                 }, [activeUrl, isIptv, iptvStreamId]);
 
-                // NEW: Native HTML5 / HLS.js Video Player Hook
                 useEffect(() => {
                     if (!activeUrl || !isIptv || streamStatus !== 'online') return;
-                    
                     const video = videoRef.current;
                     if (!video) return;
-
                     let hlsInstance = null;
-
-                    if (activeUrl.includes('.m3u8') || activeUrl.includes('m3u8')) {
+                    if (activeUrl.includes('.m3u8')) {
                         if (window.Hls && window.Hls.isSupported()) {
-                            hlsInstance = new window.Hls({
-                                enableWorker: true,
-                                lowLatencyMode: true,
-                                backBufferLength: 90
-                            });
-                            hlsInstance.loadSource(activeUrl);
-                            hlsInstance.attachMedia(video);
-                            hlsInstance.on(window.Hls.Events.MANIFEST_PARSED, () => {
-                                video.play().catch(e => console.error('Play error:', e));
-                            });
+                            hlsInstance = new window.Hls({ enableWorker: true, lowLatencyMode: true });
+                            hlsInstance.loadSource(activeUrl); hlsInstance.attachMedia(video);
+                            hlsInstance.on(window.Hls.Events.MANIFEST_PARSED, () => video.play().catch(e=>e));
                         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                            video.src = activeUrl;
-                            video.play().catch(e => console.error('Play error:', e));
+                            video.src = activeUrl; video.play().catch(e=>e);
                         }
-                    } else {
-                        // Direct playback for .mp4 / .mkv
-                        video.src = activeUrl;
-                        video.play().catch(e => console.error('Play error:', e));
-                    }
-
-                    return () => {
-                        if (hlsInstance) {
-                            hlsInstance.destroy();
-                        }
-                        if (video) {
-                            video.pause();
-                            video.removeAttribute('src');
-                            video.load();
-                        }
-                    };
+                    } else { video.src = activeUrl; video.play().catch(e=>e); }
+                    return () => { if (hlsInstance) hlsInstance.destroy(); if (video) { video.pause(); video.removeAttribute('src'); video.load(); } };
                 }, [activeUrl, isIptv, streamStatus]);
-
-                const handleCopyUrl = () => {
-                    if (!activeUrl) return;
-                    try {
-                        const textArea = document.createElement("textarea");
-                        textArea.value = activeUrl;
-                        textArea.style.position = "fixed";
-                        textArea.style.top = "0";
-                        textArea.style.left = "0";
-                        document.body.appendChild(textArea);
-                        textArea.focus();
-                        textArea.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(textArea);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                    } catch (err) {
-                        console.error('Failed to copy', err);
-                    }
-                };
 
                 return (
                     <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in" dir={isRTL ? 'rtl' : 'ltr'}>
-                        {/* Player Header */}
                         <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-30 transition-opacity duration-300">
                             <div className="flex items-center gap-3">
                                 <button onClick={() => setActivePlayerMedia(null)} className="text-white hover:text-gray-300 p-1"><ChevronDown size={28} className="rotate-90"/></button>
-                                <span className="font-bold text-white text-sm sm:text-base line-clamp-1">
-                                    {activePlayerMedia.title} {activePlayerMedia.type === 'tv' && `- S${activePlayerMedia.season} E${activePlayerMedia.episode}`}
-                                </span>
+                                <span className="font-bold text-white text-sm sm:text-base line-clamp-1">{activePlayerMedia.title} {activePlayerMedia.type === 'tv' && `- S${activePlayerMedia.season} E${activePlayerMedia.episode}`}</span>
                             </div>
-                            
                             <div className="relative">
                                 <button onClick={() => setShowSettings(!showSettings)} className="text-white p-2 hover:bg-white/10 rounded-full transition-colors"><Settings size={20}/></button>
-                                
                                 {showSettings && (
                                     <>
                                         <div className="fixed inset-0 z-40" onClick={() => setShowSettings(false)}></div>
                                         <div className={`absolute top-full mt-2 w-64 bg-[#181818] border border-gray-800 rounded-xl shadow-2xl overflow-hidden z-50 ${isRTL ? 'left-0' : 'right-0'}`}>
-                                            <button onClick={() => { setShowCastGuide(true); setShowSettings(false); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-800 text-white text-sm border-b border-gray-800">
-                                                <Cast size={16} className="text-indigo-400"/> {isRTL ? 'دليل البث للتلفاز' : 'Cast to TV'}
-                                            </button>
+                                            <button onClick={() => { setShowCastGuide(true); setShowSettings(false); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-800 text-white text-sm border-b border-gray-800"><Cast size={16} className="text-indigo-400"/> Cast to TV</button>
                                             <div className="p-3">
-                                                <div className="text-[10px] uppercase text-gray-500 mb-2 font-bold px-1">{isRTL ? 'تغيير الخادم' : 'Change Server'}</div>
+                                                <div className="text-[10px] uppercase text-gray-500 mb-2 font-bold px-1">Change Server</div>
                                                 <div className="flex flex-col gap-1 max-h-48 overflow-y-auto hide-scrollbar">
-                                                    {SERVERS.map(s => (
-                                                        <button key={s.id} onClick={() => { setSelectedServerId(s.id); setShowSettings(false); }} className={`flex items-center justify-between px-3 py-2 text-xs font-bold rounded-lg ${selectedServerId === s.id ? 'bg-indigo-600/20 text-indigo-400' : 'text-gray-300 hover:bg-neutral-800 hover:text-white'}`}>
-                                                            {s.name} {selectedServerId === s.id && <Check size={14} />}
-                                                        </button>
-                                                    ))}
+                                                    {SERVERS.map(s => <button key={s.id} onClick={() => { setSelectedServerId(s.id); setShowSettings(false); }} className={`flex items-center justify-between px-3 py-2 text-xs font-bold rounded-lg ${selectedServerId === s.id ? 'bg-indigo-600/20 text-indigo-400' : 'text-gray-300 hover:bg-neutral-800 hover:text-white'}`}>{s.name} {selectedServerId === s.id && <Check size={14} />}</button>)}
                                                 </div>
                                             </div>
                                         </div>
@@ -747,118 +818,41 @@
                             </div>
                         </div>
 
-                        {/* Video Frame */}
                         <div className="flex-grow flex flex-col items-center justify-center bg-black pt-14 pb-4 px-0 sm:px-4 overflow-y-auto relative z-10">
-                            
                             {isIptv && !activeUrl ? (
                                 <div className="absolute inset-0 bg-[#0f0f0f] flex flex-col items-center justify-center p-6 text-center z-20">
                                     <Server size={48} className="text-indigo-500 mb-4" />
                                     <h3 className="text-xl font-bold mb-2 text-white">IPTV Stream Connection</h3>
-                                    
-                                    {/* Auto-Search Status Indicators */}
-                                    {!iptvCache.loaded && !iptvCache.error && (
-                                        <div className="text-indigo-400 mb-4 flex items-center gap-2 animate-pulse text-sm">
-                                            <Database size={16} className="animate-spin" /> Loading IPTV Database...
-                                        </div>
-                                    )}
-                                    {autoSearchStatus === 'searching' && (
-                                         <div className="text-amber-400 mb-4 flex items-center gap-2 animate-pulse text-sm">
-                                            <Search size={16} /> Auto-searching for "{activePlayerMedia.title}"...
-                                        </div>
-                                    )}
-                                    {iptvCache.error && (
-                                         <div className="text-red-400 mb-4 text-xs max-w-md bg-red-900/20 p-2 rounded border border-red-500/20">
-                                            {iptvCache.error}
-                                         </div>
-                                    )}
-                                    {autoSearchStatus === 'not_found' && (
-                                         <div className="text-amber-400 mb-4 text-sm max-w-md bg-amber-900/20 p-3 rounded">
-                                            Could not automatically match "{activePlayerMedia.title}" in your IPTV list.
-                                         </div>
-                                    )}
-
-                                    <p className="text-sm text-gray-400 max-w-md mb-6 leading-relaxed">
-                                        Please manually enter the numeric Stream ID below.
-                                    </p>
+                                    {!iptvCache.loaded && !iptvCache.error && <div className="text-indigo-400 mb-4 flex items-center gap-2 animate-pulse text-sm"><Database size={16} className="animate-spin" /> Loading IPTV Database...</div>}
+                                    {autoSearchStatus === 'searching' && <div className="text-amber-400 mb-4 flex items-center gap-2 animate-pulse text-sm"><Search size={16} /> Auto-searching for "{activePlayerMedia.title}"...</div>}
+                                    {iptvCache.error && <div className="text-red-400 mb-4 text-xs max-w-md bg-red-900/20 p-2 rounded border border-red-500/20">{iptvCache.error}</div>}
+                                    {autoSearchStatus === 'not_found' && <div className="text-amber-400 mb-4 text-sm max-w-md bg-amber-900/20 p-3 rounded">Could not automatically match "{activePlayerMedia.title}" in your IPTV list.</div>}
+                                    <p className="text-sm text-gray-400 max-w-md mb-6 leading-relaxed">Please manually enter the numeric Stream ID below.</p>
                                     <div className="flex flex-col gap-3 w-full max-w-xs">
-                                        <input 
-                                            type="text" 
-                                            placeholder="Stream ID (e.g. 12345.mp4)" 
-                                            value={iptvStreamId} 
-                                            onChange={e => setIptvStreamId(e.target.value)} 
-                                            className="bg-neutral-800 border border-neutral-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500 text-center font-mono" 
-                                        />
+                                        <input type="text" placeholder="Stream ID (e.g. 12345.mp4)" value={iptvStreamId} onChange={e => setIptvStreamId(e.target.value)} className="bg-neutral-800 border border-neutral-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500 text-center font-mono" />
                                     </div>
                                 </div>
                             ) : (
                                 <div className="w-full aspect-video max-h-[75vh] max-w-6xl mx-auto rounded-lg overflow-hidden shadow-2xl relative">
-                                    {isIptv && streamStatus === 'checking' && (
-                                        <div className="absolute inset-0 bg-neutral-900 flex flex-col items-center justify-center z-20">
-                                            <Database size={32} className="text-indigo-500 animate-spin mb-4" />
-                                            <p className="text-white font-bold">Pinging Stream Connection...</p>
-                                        </div>
-                                    )}
-                                    {isIptv && streamStatus === 'offline' && (
-                                        <div className="absolute inset-0 bg-neutral-900 flex flex-col items-center justify-center z-20 p-6 text-center">
-                                            <AlertCircle size={48} className="text-red-500 mb-4" />
-                                            <h3 className="text-xl font-bold text-white mb-2">Stream Unreachable</h3>
-                                            <p className="text-sm text-gray-400 max-w-md mb-4">
-                                                The browser blocked the connection, or the Stream ID is invalid. <br/><br/>
-                                                <strong className="text-amber-400">Remember:</strong> If your IPTV domain is HTTP, browsers block it. You must open the URL in VLC, an external app, or a new tab.
-                                            </p>
-                                            <a href={activeUrl} target="_blank" rel="noopener noreferrer" className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold transition-colors">
-                                                Open Stream in New Tab
-                                            </a>
-                                        </div>
-                                    )}
-                                    
-                                    {/* NATIVE VIDEO OR IFRAME SWAP */}
-                                    {isIptv ? (
-                                        <video 
-                                            ref={videoRef}
-                                            className={`absolute inset-0 w-full h-full bg-black ${streamStatus === 'online' ? 'opacity-100' : 'opacity-0'}`} 
-                                            controls 
-                                            autoPlay
-                                        />
-                                    ) : (
-                                        <iframe src={activeUrl} className={`absolute inset-0 w-full h-full border-0 ${streamStatus === 'online' ? 'opacity-100' : 'opacity-0'}`} allowFullScreen allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>
-                                    )}
+                                    {isIptv && streamStatus === 'checking' && <div className="absolute inset-0 bg-neutral-900 flex flex-col items-center justify-center z-20"><Database size={32} className="text-indigo-500 animate-spin mb-4" /><p className="text-white font-bold">Pinging Stream Connection...</p></div>}
+                                    {isIptv && streamStatus === 'offline' && <div className="absolute inset-0 bg-neutral-900 flex flex-col items-center justify-center z-20 p-6 text-center"><AlertCircle size={48} className="text-red-500 mb-4" /><h3 className="text-xl font-bold text-white mb-2">Stream Unreachable</h3><p className="text-sm text-gray-400 max-w-md mb-4">The browser blocked the connection, or the ID is invalid. Try opening in a new tab.</p><a href={activeUrl} target="_blank" className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold">Open Stream in New Tab</a></div>}
+                                    {isIptv ? <video ref={videoRef} className={`absolute inset-0 w-full h-full bg-black ${streamStatus === 'online' ? 'opacity-100' : 'opacity-0'}`} controls autoPlay playsInline /> : <iframe src={activeUrl} className={`absolute inset-0 w-full h-full border-0 ${streamStatus === 'online' ? 'opacity-100' : 'opacity-0'}`} allowFullScreen allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>}
                                 </div>
                             )}
 
-                            {/* Full Link Visibility and Copy */}
                             <div className="w-full max-w-6xl mx-auto mt-4 px-4 sm:px-0">
                                 <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 p-2 sm:px-4 sm:py-3 rounded-lg shadow-lg">
                                     <Globe size={18} className="text-gray-500 flex-shrink-0" />
-                                    <div className="flex-grow min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                                        <span className="text-xs sm:text-sm text-gray-400 font-mono select-all" dir="ltr">{activeUrl || 'Awaiting Input...'}</span>
-                                    </div>
+                                    <div className="flex-grow min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"><span className="text-xs sm:text-sm text-gray-400 font-mono select-all" dir="ltr">{activeUrl || 'Awaiting Input...'}</span></div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
-                                        <button onClick={handleCopyUrl} disabled={!activeUrl} className="flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-white px-3 py-1.5 rounded transition-colors text-xs font-bold">
-                                            {copied ? <CheckCheck size={14} className="text-green-400" /> : <Copy size={14} />}
-                                            <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy Link'}</span>
+                                        <button onClick={() => { try { const ta = document.createElement("textarea"); ta.value = activeUrl; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch(e){} }} disabled={!activeUrl} className="flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-white px-3 py-1.5 rounded transition-colors text-xs font-bold">
+                                            {copied ? <CheckCheck size={14} className="text-green-400" /> : <Copy size={14} />}<span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy Link'}</span>
                                         </button>
-                                        {activeUrl && (
-                                            <a href={activeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded transition-colors text-xs font-bold shadow-lg shadow-indigo-900/20">
-                                                <ExternalLink size={14} />
-                                                <span className="hidden sm:inline">Open in Tab</span>
-                                            </a>
-                                        )}
+                                        {activeUrl && <a href={activeUrl} target="_blank" className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded transition-colors text-xs font-bold shadow-lg shadow-indigo-900/20"><ExternalLink size={14} /><span className="hidden sm:inline">Open in Tab</span></a>}
                                     </div>
                                 </div>
                             </div>
                         </div>
-
-                        {/* Cast Guide Modal inside Player */}
-                        {showCastGuide && (
-                            <div className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
-                                <div className="bg-[#181818] p-6 rounded-xl max-w-sm w-full border border-gray-800">
-                                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Cast size={20} className="text-indigo-500"/> {isRTL ? 'كيفية البث' : 'How to Cast'}</h3>
-                                    <p className="text-sm text-gray-400 mb-4">{isRTL ? 'استخدم تطبيق Web Video Caster على هاتفك، أو ميزة Cast في متصفح Chrome على الكمبيوتر.' : 'Use the Web Video Caster app on mobile, or Chrome Cast Tab on desktop to cast with subtitles.'}</p>
-                                    <button onClick={() => setShowCastGuide(false)} className="w-full py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700">Close</button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 );
             };
@@ -868,7 +862,10 @@
                 <div className="pb-24 animate-in fade-in duration-500">
                     <HeroBanner endpoint="/trending/all/day" />
                     <div className="mt-[-80px] relative z-10">
+                        <NewEpisodesRow />
                         <ContinueWatchingRow />
+                        {/* Dynamic Personalization Row */}
+                        {favoriteGenre && <MediaRow title="Recommended for You" url={`/discover/movie?with_genres=${favoriteGenre}&sort_by=popularity.desc`} onSeeAll={setSeeAllConfig} />}
                         {ROW_CONFIGS.home.map(row => <MediaRow key={row.title} title={row.title} url={row.url} onSeeAll={setSeeAllConfig} />)}
                     </div>
                 </div>
@@ -898,21 +895,14 @@
                 const [topSearches, setTopSearches] = useState([]);
                 const [loading, setLoading] = useState(false);
 
-                useEffect(() => {
-                    fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${tmdbKey}&language=${dbLanguage}`)
-                        .then(res => res.json()).then(data => setTopSearches(data.results || []));
-                }, [tmdbKey, dbLanguage]);
+                useEffect(() => { fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${tmdbKey}&language=${dbLanguage}`).then(res => res.json()).then(data => setTopSearches(data.results || [])); }, [tmdbKey, dbLanguage]);
 
                 useEffect(() => {
                     if (!searchQuery.trim()) { setResults([]); return; }
                     setLoading(true);
                     const handler = setTimeout(() => {
                         fetch(`https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&language=${dbLanguage}&query=${encodeURIComponent(searchQuery)}`)
-                            .then(res => res.json())
-                            .then(data => {
-                                setResults((data.results || []).filter(i => i.media_type !== 'person' && i.backdrop_path));
-                                setLoading(false);
-                            });
+                            .then(res => res.json()).then(data => { setResults((data.results || []).filter(i => i.media_type !== 'person' && i.backdrop_path)); setLoading(false); });
                     }, 500);
                     return () => clearTimeout(handler);
                 }, [searchQuery, tmdbKey, dbLanguage]);
@@ -923,21 +913,17 @@
                     <div className="pt-12 pb-24 px-4 max-w-2xl mx-auto min-h-screen animate-in fade-in" dir={isRTL ? 'rtl' : 'ltr'}>
                         <div className="bg-[#2b2b2b] flex items-center px-4 py-3 rounded-md mb-6 sticky top-4 z-20 shadow-xl">
                             <Search size={20} className="text-gray-400 mr-3" />
-                            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={isRTL ? "البحث عن الأفلام، المسلسلات..." : "Search for a show, movie..."} className="bg-transparent text-white w-full outline-none" dir="auto" />
+                            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search for a show, movie..." className="bg-transparent text-white w-full outline-none" dir="auto" />
                             {searchQuery && <button onClick={() => setSearchQuery('')}><X size={20} className="text-gray-400"/></button>}
                         </div>
-                        
-                        <h2 className="text-xl font-bold mb-4">{searchQuery ? (isRTL?'النتائج':'Results') : (isRTL?'أعلى عمليات البحث':'Top Searches')}</h2>
-                        
+                        <h2 className="text-xl font-bold mb-4">{searchQuery ? 'Results' : 'Top Searches'}</h2>
                         {loading ? <LoadingSpinner/> : (
                             <div className="space-y-4">
                                 {displayList.map(item => (
                                     <div key={item.id} onClick={() => openDetails(item)} className="flex items-center gap-4 cursor-pointer group hover:bg-[#1e1e1e] p-2 rounded-lg transition-colors">
                                         <div className="relative w-32 aspect-video rounded overflow-hidden bg-neutral-800 flex-shrink-0">
-                                            <img src={`https://image.tmdb.org/t/p/w300${item.backdrop_path || item.poster_path}`} className="w-full h-full object-cover" alt={item.title || item.name} />
-                                            <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 backdrop-blur-md">
-                                                <Star size={8} className="fill-amber-400 text-amber-400" /> {item.vote_average ? item.vote_average.toFixed(1) : 'NR'}
-                                            </div>
+                                            <img src={`https://image.tmdb.org/t/p/w300${item.backdrop_path || item.poster_path}`} className="w-full h-full object-cover" />
+                                            <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 backdrop-blur-md"><Star size={8} className="fill-amber-400 text-amber-400" /> {item.vote_average ? item.vote_average.toFixed(1) : 'NR'}</div>
                                         </div>
                                         <span className="font-bold text-sm sm:text-base flex-grow line-clamp-2">{item.title || item.name}</span>
                                         <button className="flex-shrink-0 p-2"><PlayCircle size={28} className="text-white group-hover:scale-110 transition-transform" /></button>
@@ -949,123 +935,218 @@
                 );
             };
 
-            const SettingsView = () => {
+            const ProfileView = () => {
+                const [activeProfileTab, setActiveProfileTab] = useState('watchlist'); // watchlist, lists, stats, settings
+                const [newListMode, setNewListMode] = useState(false);
+                const [newListName, setNewListName] = useState('');
                 const [testState, setTestState] = useState({ loading: false, result: null, isError: false });
 
+                // Stats Calculation Engine
+                const stats = useMemo(() => {
+                    let totalMinutes = 0;
+                    let typeCount = { tv: 0, movie: 0 };
+                    let genres = {};
+                    
+                    historyList.forEach(item => {
+                        totalMinutes += item.runtime || (item.Type === 'movie' ? 120 : 45);
+                        typeCount[item.Type] = (typeCount[item.Type] || 0) + 1;
+                        if (item.genres) item.genres.forEach(g => { genres[g] = (genres[g] || 0) + 1; });
+                    });
+
+                    const totalHours = Math.floor(totalMinutes / 60);
+                    const totalDays = (totalHours / 24).toFixed(1);
+                    const topGenres = Object.entries(genres).sort((a,b) => b[1] - a[1]).slice(0, 3).map(g => GENRE_MAP[g[0]] || "Unknown");
+
+                    return { totalHours, totalDays, typeCount, topGenres };
+                }, [historyList]);
+
+                // Settings Handlers
                 const handleTestConnection = async () => {
-                    if (!iptvDomain || !iptvUser || !iptvPass) {
-                        setTestState({ loading: false, result: 'Please fill in all credentials.', isError: true });
-                        return;
-                    }
+                    if (!iptvDomain || !iptvUser || !iptvPass) { setTestState({ loading: false, result: 'Please fill in all credentials.', isError: true }); return; }
                     setTestState({ loading: true, result: null, isError: false });
                     try {
-                        const cleanDomain = iptvDomain.replace(/\/$/, '');
-                        const url = `${cleanDomain}/player_api.php?username=${iptvUser}&password=${iptvPass}`;
-                        
-                        const fetchWithProxy = async () => {
-                            // Try direct connection first
-                            try {
-                                const res = await fetch(url, { mode: 'cors', headers: { 'Accept': 'application/json' } });
-                                if (res.ok) return await res.json();
-                            } catch(e) {}
-
-                            // Fallback to proxies
-                            const proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?'];
-                            for (const proxy of proxies) {
-                                try {
-                                    const fetchUrl = `${proxy}${encodeURIComponent(url)}`;
-                                    const res = await fetch(fetchUrl, { cache: 'no-store' });
-                                    if (res.ok) return await res.json();
-                                } catch(e) { continue; }
-                            }
-                            throw new Error('All proxies failed');
-                        };
-
-                        const data = await fetchWithProxy();
-                        if (data.user_info && data.user_info.auth === 1) {
-                            const expDate = data.user_info.exp_date ? new Date(data.user_info.exp_date * 1000).toLocaleDateString() : 'Unlimited';
-                            setTestState({ loading: false, result: `✅ Connected! Status: ${data.user_info.status} | Expires: ${expDate}`, isError: false });
-                        } else {
-                            setTestState({ loading: false, result: '❌ Invalid Username or Password.', isError: true });
-                        }
+                        const url = `${iptvDomain.replace(/\/$/, '')}/player_api.php?username=${iptvUser}&password=${iptvPass}`;
+                        const res = await fetch(url, { mode: 'cors', headers: { 'Accept': 'application/json' } });
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data.user_info?.auth === 1) setTestState({ loading: false, result: `✅ Connected! Status: ${data.user_info.status}`, isError: false });
+                            else setTestState({ loading: false, result: '❌ Invalid Username or Password.', isError: true });
+                        } else throw new Error();
                     } catch(e) {
-                        const errMsg = window.location.protocol === 'https:' && iptvDomain.startsWith('http://')
-                            ? '❌ HTTPS blocking HTTP. Please use a CORS extension or run locally.'
-                            : '❌ Network/CORS Error. Ensure domain is correct.';
-                        setTestState({ loading: false, result: errMsg, isError: true });
+                        setTestState({ loading: false, result: '❌ Network/CORS Error. Ensure domain is correct.', isError: true });
                     }
                 };
 
-                return (
-                    <div className="pt-12 pb-24 px-4 max-w-md mx-auto min-h-screen animate-in fade-in" dir={isRTL ? 'rtl' : 'ltr'}>
-                        <h1 className="text-2xl font-bold mb-8 flex items-center gap-3"><Settings size={28}/> App Settings</h1>
-                        
-                        <div className="space-y-6">
-                            {/* IPTV Settings Section */}
-                            <div className="bg-[#181818] p-4 rounded-lg border border-neutral-800">
-                                <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2"><KeySquare size={18} className="text-indigo-400"/> IPTV Configuration</h2>
-                                
-                                <div className="bg-amber-900/20 border border-amber-500/20 text-amber-400/90 text-xs p-3 rounded mb-4 flex gap-2">
-                                    <AlertCircle size={16} className="flex-shrink-0"/>
-                                    <p><strong>Important:</strong> Browsers block HTTP media on HTTPS sites. Because your domain uses <code className="bg-black px-1 rounded">http://</code>, you must host this file locally on your computer to watch it.</p>
-                                </div>
+                const handleShareList = (list) => {
+                    const text = `Check out my list "${list.name}" on Universal Index Player:\n\n` + list.items.map((i, idx) => `${idx + 1}. ${i.Title} (${i.Type})`).join('\n');
+                    try {
+                        const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+                        alert("List copied to clipboard! Share it with friends.");
+                    } catch(e) {}
+                };
 
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-400 mb-1 block">Domain URL (with port)</label>
-                                        <input type="text" placeholder="e.g., http://hydraa.st:8080" value={iptvDomain} onChange={e => setIptvDomain(e.target.value)} className="w-full bg-[#2b2b2b] text-white text-sm px-3 py-2 rounded outline-none focus:ring-1 focus:ring-indigo-500" dir="ltr" />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-400 mb-1 block">Username</label>
-                                        <input type="text" value={iptvUser} onChange={e => setIptvUser(e.target.value)} className="w-full bg-[#2b2b2b] text-white text-sm px-3 py-2 rounded outline-none focus:ring-1 focus:ring-indigo-500" dir="ltr" />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-400 mb-1 block">Password</label>
-                                        <input type="password" value={iptvPass} onChange={e => setIptvPass(e.target.value)} className="w-full bg-[#2b2b2b] text-white text-sm px-3 py-2 rounded outline-none focus:ring-1 focus:ring-indigo-500" dir="ltr" />
-                                    </div>
-                                </div>
-                                
-                                {/* Test Credentials Button */}
-                                <div className="mt-4">
-                                    <button onClick={handleTestConnection} disabled={testState.loading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-2 rounded transition-colors disabled:opacity-50">
-                                        {testState.loading ? 'Testing...' : 'Test Connection'}
-                                    </button>
-                                    {testState.result && (
-                                        <div className={`mt-2 p-2 rounded text-xs font-medium ${testState.isError ? 'bg-red-900/30 text-red-400 border border-red-500/20' : 'bg-green-900/30 text-green-400 border border-green-500/20'}`}>
-                                            {testState.result}
+                return (
+                    <div className="pt-10 pb-24 max-w-4xl mx-auto min-h-screen animate-in fade-in" dir={isRTL ? 'rtl' : 'ltr'}>
+                        {/* Profile Header */}
+                        <div className="px-6 flex items-center justify-between mb-8">
+                            <div className="flex items-center gap-4">
+                                <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg"><User size={32} className="text-white"/></div>
+                                <div><h1 className="text-2xl font-bold">My Library</h1><p className="text-sm text-gray-400">{historyList.length} items watched</p></div>
+                            </div>
+                            <div className="flex gap-2">
+                                <button className="p-2 bg-[#1e1e1e] rounded-full hover:bg-neutral-800 text-amber-400 relative" title="Release Alerts (Coming Soon)"><Bell size={20} /><span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span></button>
+                                <button onClick={() => setActiveProfileTab('settings')} className={`p-2 rounded-full transition-colors ${activeProfileTab === 'settings' ? 'bg-indigo-600 text-white' : 'bg-[#1e1e1e] hover:bg-neutral-800 text-gray-400'}`}><Settings size={20}/></button>
+                            </div>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="px-6 flex gap-4 mb-8 border-b border-gray-800 pb-2 overflow-x-auto hide-scrollbar">
+                            <button onClick={() => setActiveProfileTab('watchlist')} className={`pb-2 font-bold whitespace-nowrap ${activeProfileTab === 'watchlist' ? 'text-white border-b-2 border-indigo-500' : 'text-gray-500'}`}>Watchlist</button>
+                            <button onClick={() => setActiveProfileTab('lists')} className={`pb-2 font-bold whitespace-nowrap ${activeProfileTab === 'lists' ? 'text-white border-b-2 border-indigo-500' : 'text-gray-500'}`}>Custom Lists</button>
+                            <button onClick={() => setActiveProfileTab('stats')} className={`pb-2 font-bold whitespace-nowrap ${activeProfileTab === 'stats' ? 'text-white border-b-2 border-indigo-500' : 'text-gray-500'}`}>Viewing Stats</button>
+                            <button onClick={() => setActiveProfileTab('history')} className={`pb-2 font-bold whitespace-nowrap ${activeProfileTab === 'history' ? 'text-white border-b-2 border-indigo-500' : 'text-gray-500'}`}>History</button>
+                        </div>
+
+                        <div className="px-6">
+                            {/* WATCHLIST TAB */}
+                            {activeProfileTab === 'watchlist' && (
+                                <div className="animate-in fade-in">
+                                    {favorites.length === 0 ? (
+                                        <div className="text-center py-12 text-gray-500 bg-[#181818] rounded-xl border border-gray-800"><Heart size={32} className="mx-auto mb-3 opacity-20" /><p>Your watchlist is empty.</p></div>
+                                    ) : (
+                                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+                                            {favorites.map(item => (
+                                                <div key={item.id} onClick={() => openDetails(item)} className="cursor-pointer transition-transform hover:scale-105">
+                                                    <img src={item.Poster} className="w-full aspect-[2/3] object-cover rounded-md shadow-lg" />
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
+                            )}
 
-                                {/* Database Cache Status Indicator */}
-                                <div className="mt-4 pt-4 border-t border-neutral-800 text-[10px] text-gray-400 font-mono">
-                                    Status: {iptvCache.loaded ? <span className="text-green-400">Connected ({iptvCache.vod.length} Movies, {iptvCache.series.length} Series)</span> : (iptvCache.error ? <span className="text-red-400">{iptvCache.error}</span> : "Waiting...")}
+                            {/* CUSTOM LISTS TAB */}
+                            {activeProfileTab === 'lists' && (
+                                <div className="animate-in fade-in space-y-6">
+                                    {newListMode ? (
+                                        <div className="bg-[#181818] p-4 rounded-xl border border-gray-800 flex gap-3">
+                                            <input type="text" autoFocus value={newListName} onChange={e => setNewListName(e.target.value)} placeholder="List Name (e.g. Anime)" className="bg-neutral-800 px-4 py-2 rounded outline-none flex-grow" />
+                                            <button onClick={() => { createCustomList(newListName); setNewListMode(false); setNewListName(''); }} className="bg-indigo-600 px-4 py-2 rounded font-bold">Create</button>
+                                            <button onClick={() => setNewListMode(false)} className="bg-neutral-700 px-4 py-2 rounded">Cancel</button>
+                                        </div>
+                                    ) : (
+                                        <button onClick={() => setNewListMode(true)} className="w-full py-4 border-2 border-dashed border-gray-700 rounded-xl text-gray-400 hover:text-white hover:border-indigo-500 flex justify-center items-center gap-2 transition-colors font-bold"><Plus size={20}/> Create New List</button>
+                                    )}
+
+                                    {customLists.map(list => (
+                                        <div key={list.id} className="bg-[#181818] rounded-xl border border-gray-800 overflow-hidden shadow-lg">
+                                            <div className="p-4 bg-neutral-900 border-b border-gray-800 flex justify-between items-center">
+                                                <h3 className="font-bold text-lg">{list.name} <span className="text-gray-500 text-sm font-normal">({list.items.length})</span></h3>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => handleShareList(list)} className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded text-indigo-400" title="Copy to share"><Share2 size={16}/></button>
+                                                    <button onClick={() => setCustomLists(prev => prev.filter(l => l.id !== list.id))} className="p-2 bg-neutral-800 hover:bg-red-900/40 rounded text-red-400" title="Delete List"><Trash2 size={16}/></button>
+                                                </div>
+                                            </div>
+                                            <div className="p-4 flex overflow-x-auto gap-3 hide-scrollbar">
+                                                {list.items.length === 0 ? <p className="text-sm text-gray-500 py-4">No items yet. Add them from a movie's details page.</p> : 
+                                                    list.items.map(item => (
+                                                        <img key={item.id} onClick={() => openDetails(item)} src={item.Poster} className="w-24 aspect-[2/3] object-cover rounded cursor-pointer hover:opacity-80 transition-opacity" />
+                                                    ))
+                                                }
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            </div>
+                            )}
 
-                            {/* General Settings Section */}
-                            <div className="bg-[#181818] p-4 rounded-lg">
-                                <label className="text-sm font-bold text-gray-400 mb-2 block">TMDB API Key</label>
-                                <input type="text" value={tmdbKey} onChange={e => setTmdbKey(e.target.value)} className="w-full bg-[#2b2b2b] text-white text-sm px-3 py-2 rounded outline-none focus:ring-1 focus:ring-indigo-500" dir="ltr" />
-                            </div>
-
-                            <div className="bg-[#181818] p-4 rounded-lg">
-                                <label className="text-sm font-bold text-gray-400 mb-2 block">Metadata Language</label>
-                                <select value={dbLanguage} onChange={e => setDbLanguage(e.target.value)} className="w-full bg-[#2b2b2b] text-white text-sm px-3 py-2 rounded outline-none" dir="ltr">
-                                    <option value="en-US">English</option>
-                                    <option value="ar">Arabic (العربية)</option>
-                                    <option value="fr-FR">French (Français)</option>
-                                    <option value="es-ES">Spanish (Español)</option>
-                                </select>
-                            </div>
-
-                            <div className="bg-[#181818] p-4 rounded-lg flex justify-between items-center">
-                                <div>
-                                    <span className="font-bold text-sm block">Clear Watch History</span>
-                                    <span className="text-xs text-gray-400">{historyList.length} items</span>
+                            {/* STATS TAB */}
+                            {activeProfileTab === 'stats' && (
+                                <div className="animate-in fade-in space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-gradient-to-br from-indigo-900/40 to-[#181818] p-5 rounded-xl border border-indigo-500/20">
+                                            <Clock size={24} className="text-indigo-400 mb-2"/>
+                                            <p className="text-sm text-gray-400 font-medium">Total Watch Time</p>
+                                            <h2 className="text-3xl font-extrabold mt-1">{stats.totalHours} <span className="text-lg font-medium text-gray-500">hrs</span></h2>
+                                            <p className="text-xs text-indigo-300 mt-1">Approx. {stats.totalDays} days</p>
+                                        </div>
+                                        <div className="bg-gradient-to-br from-purple-900/40 to-[#181818] p-5 rounded-xl border border-purple-500/20">
+                                            <PieChart size={24} className="text-purple-400 mb-2"/>
+                                            <p className="text-sm text-gray-400 font-medium">Media Preference</p>
+                                            <div className="flex justify-between items-end mt-2">
+                                                <div><span className="text-xl font-bold text-white">{stats.typeCount.movie}</span> <span className="text-xs text-gray-500">Movies</span></div>
+                                                <div><span className="text-xl font-bold text-white">{stats.typeCount.tv}</span> <span className="text-xs text-gray-500">Shows</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="bg-[#181818] p-5 rounded-xl border border-gray-800">
+                                        <h3 className="font-bold text-gray-300 mb-4 flex items-center gap-2"><BarChart2 size={18}/> Top Genres</h3>
+                                        {stats.topGenres.length === 0 ? <p className="text-sm text-gray-500">Watch more content to see stats.</p> : (
+                                            <div className="space-y-3">
+                                                {stats.topGenres.map((g, i) => (
+                                                    <div key={i} className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded bg-neutral-800 flex items-center justify-center font-bold text-gray-400">#{i+1}</div>
+                                                        <div className="flex-grow bg-neutral-800 h-2 rounded-full overflow-hidden"><div className="bg-indigo-500 h-full" style={{width: `${100 - (i*20)}%`}}></div></div>
+                                                        <div className="w-24 text-right text-sm font-bold">{g}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                                <button onClick={() => setHistoryList([])} className="bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white px-4 py-2 rounded font-bold text-sm transition-colors">Clear</button>
-                            </div>
+                            )}
+
+                            {/* HISTORY TAB */}
+                            {activeProfileTab === 'history' && (
+                                <div className="animate-in fade-in">
+                                    {historyList.length === 0 ? (
+                                        <div className="text-center py-12 text-gray-500 bg-[#181818] rounded-xl border border-gray-800"><History size={32} className="mx-auto mb-3 opacity-20" /><p>History is empty.</p></div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {historyList.map(h => (
+                                                <div key={h.historyId} className="flex items-center p-3 bg-[#181818] border border-gray-800 rounded-xl">
+                                                    <img src={h.Poster} className="w-12 h-16 object-cover rounded shadow mr-4" />
+                                                    <div className="flex flex-col flex-grow">
+                                                        <span className="font-bold text-sm">{h.Title}</span>
+                                                        <span className="text-xs text-gray-400">{h.Type === 'tv' ? `S${h.season} E${h.episode}` : 'Movie'}</span>
+                                                        <span className="text-[10px] text-gray-500 mt-1">{new Date(h.timestamp).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => launchPlayer(h, h.season, h.episode, h.epTitle)} className="p-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white"><Play size={16}/></button>
+                                                        <button onClick={() => setHistoryList(prev => prev.filter(item => item.historyId !== h.historyId))} className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded text-red-400"><Trash2 size={16}/></button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* SETTINGS TAB (Hidden from subnav, accessed via gear) */}
+                            {activeProfileTab === 'settings' && (
+                                <div className="animate-in fade-in space-y-6">
+                                    <div className="bg-[#181818] p-4 rounded-xl border border-gray-800">
+                                        <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2"><KeySquare size={18} className="text-indigo-400"/> IPTV Configuration</h2>
+                                        <div className="bg-amber-900/20 border border-amber-500/20 text-amber-400/90 text-xs p-3 rounded mb-4 flex gap-2">
+                                            <AlertCircle size={16} className="flex-shrink-0"/><p><strong>Important:</strong> HTTP IPTV requires local HTML file usage.</p>
+                                        </div>
+                                        <div className="space-y-3">
+                                            <input type="text" placeholder="Domain URL" value={iptvDomain} onChange={e => setIptvDomain(e.target.value)} className="w-full bg-[#2b2b2b] px-3 py-2 rounded outline-none" />
+                                            <input type="text" placeholder="Username" value={iptvUser} onChange={e => setIptvUser(e.target.value)} className="w-full bg-[#2b2b2b] px-3 py-2 rounded outline-none" />
+                                            <input type="password" placeholder="Password" value={iptvPass} onChange={e => setIptvPass(e.target.value)} className="w-full bg-[#2b2b2b] px-3 py-2 rounded outline-none" />
+                                        </div>
+                                        <button onClick={handleTestConnection} className="w-full mt-4 bg-indigo-600 py-2 rounded font-bold text-sm">Test Connection</button>
+                                        {testState.result && <div className={`mt-2 p-2 rounded text-xs ${testState.isError ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>{testState.result}</div>}
+                                    </div>
+                                    
+                                    <div className="bg-[#181818] p-4 rounded-xl border border-gray-800">
+                                        <label className="text-sm font-bold text-gray-400 mb-2 block">TMDB API Key</label>
+                                        <input type="text" value={tmdbKey} onChange={e => setTmdbKey(e.target.value)} className="w-full bg-[#2b2b2b] px-3 py-2 rounded outline-none" />
+                                    </div>
+                                    
+                                    <button onClick={() => { setHistoryList([]); setWatchedEpisodes({}); }} className="w-full bg-red-600/20 text-red-500 py-3 rounded-xl font-bold border border-red-500/20">Wipe All History & Stats Data</button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
@@ -1074,7 +1155,6 @@
             // --- Render ---
             return (
                 <div className="relative w-full h-full min-h-screen pb-20">
-                    {/* Main Content Areas */}
                     {seeAllConfig ? (
                         <SeeAllView config={seeAllConfig} onBack={() => setSeeAllConfig(null)} />
                     ) : (
@@ -1083,7 +1163,7 @@
                             {activeTab === 'movies' && <MoviesView />}
                             {activeTab === 'tv' && <TvView />}
                             {activeTab === 'search' && <SearchView />}
-                            {activeTab === 'settings' && <SettingsView />}
+                            {activeTab === 'profile' && <ProfileView />}
                         </>
                     )}
 
@@ -1095,7 +1175,7 @@
                                 { id: 'movies', icon: Film, label: 'Movies' },
                                 { id: 'tv', icon: Tv, label: 'TV Shows' },
                                 { id: 'search', icon: Search, label: 'Search' },
-                                { id: 'settings', icon: Settings, label: 'Settings' }
+                                { id: 'profile', icon: User, label: 'My Library' }
                             ].map(tab => {
                                 const Icon = tab.icon;
                                 const isActive = activeTab === tab.id;

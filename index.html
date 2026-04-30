@@ -424,11 +424,32 @@
             const isFav = favorites.some(f => f.id === details.id);
             const showWatchedMap = watchedEpisodes[details.id] || {};
 
+            // NEW: Future date helpers for unaired content
+            const isFutureDate = (dateString) => dateString && new Date(dateString) > new Date();
+            const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'}) : 'TBA';
+
+            const isUnairedMovie = type === 'movie' && isFutureDate(details.release_date);
+            const isUnairedShow = type === 'tv' && isFutureDate(details.first_air_date);
+
             let nextEpToPlay = episodes[0];
-            if (type === 'tv' && showWatchedMap[season]) {
-                const watchedInSeason = showWatchedMap[season];
-                const nextEp = episodes.find(e => !watchedInSeason.includes(e.episode_number));
-                if (nextEp) nextEpToPlay = nextEp;
+            let isNextEpUnaired = false;
+            
+            if (type === 'tv' && episodes.length > 0) {
+                const watchedInSeason = showWatchedMap[season] || [];
+                // Only consider episodes that have aired
+                const availableEpisodes = episodes.filter(e => !isFutureDate(e.air_date));
+                
+                if (availableEpisodes.length > 0) {
+                    const nextEp = availableEpisodes.find(e => !watchedInSeason.includes(e.episode_number));
+                    if (nextEp) {
+                        nextEpToPlay = nextEp;
+                    } else {
+                        nextEpToPlay = availableEpisodes[availableEpisodes.length - 1]; // Fallback to last aired
+                    }
+                } else {
+                    nextEpToPlay = episodes[0];
+                    isNextEpUnaired = true; // Flag to disable season resume button
+                }
             }
 
             const videos = details.videos?.results || [];
@@ -518,13 +539,25 @@
 
                             <div className="flex gap-3">
                                 {type === 'movie' ? (
-                                    <button onClick={() => launchPlayer(details, null, null, null, details)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
-                                        <Play size={20} className="fill-black" /> Play Movie
-                                    </button>
+                                    isUnairedMovie ? (
+                                        <button disabled className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 text-neutral-400 py-2.5 rounded font-bold shadow-lg border border-neutral-700 cursor-not-allowed">
+                                            <Clock size={20} /> Premieres {formatDate(details.release_date)}
+                                        </button>
+                                    ) : (
+                                        <button onClick={() => launchPlayer(details, null, null, null, details)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
+                                            <Play size={20} className="fill-black" /> Play Movie
+                                        </button>
+                                    )
                                 ) : (
-                                    <button onClick={() => nextEpToPlay && launchPlayer(details, season, nextEpToPlay.episode_number, nextEpToPlay.name, details)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
-                                        <Play size={20} className="fill-black" /> Resume S{season} E{nextEpToPlay?.episode_number || 1}
-                                    </button>
+                                    isUnairedShow || isNextEpUnaired ? (
+                                        <button disabled className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 text-neutral-400 py-2.5 rounded font-bold shadow-lg border border-neutral-700 cursor-not-allowed">
+                                            <Clock size={20} /> Airs {formatDate(nextEpToPlay?.air_date || details.first_air_date)}
+                                        </button>
+                                    ) : (
+                                        <button onClick={() => nextEpToPlay && launchPlayer(details, season, nextEpToPlay.episode_number, nextEpToPlay.name, details)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
+                                            <Play size={20} className="fill-black" /> Resume S{season} E{nextEpToPlay?.episode_number || 1}
+                                        </button>
+                                    )
                                 )}
                                 {trailer && (
                                     <button onClick={() => setShowTrailer(true)} className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 text-white py-2.5 rounded font-bold hover:bg-neutral-700 transition-colors shadow-lg border border-neutral-700">
@@ -604,23 +637,38 @@
                                         <div className="space-y-4">
                                             {episodes.map(ep => {
                                                 const isEpWatched = showWatchedMap[season]?.includes(ep.episode_number);
+                                                const isUnaired = isFutureDate(ep.air_date);
+                                                
                                                 return (
-                                                <div key={ep.id} className="flex gap-4 p-2 hover:bg-neutral-800 rounded-lg group transition-colors relative">
-                                                    <div tabIndex={0} onClick={() => launchPlayer(details, season, ep.episode_number, ep.name, details)} onKeyDown={(e) => e.key === 'Enter' && launchPlayer(details, season, ep.episode_number, ep.name, details)} className="relative w-32 aspect-video flex-shrink-0 rounded overflow-hidden bg-neutral-800 cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none">
-                                                        {ep.still_path && <img src={`https://image.tmdb.org/t/p/w300${ep.still_path}`} className={`w-full h-full object-cover ${isEpWatched ? 'opacity-40' : 'opacity-80 group-hover:opacity-100'}`} />}
-                                                        <div className="absolute inset-0 flex items-center justify-center">
-                                                            <PlayCircle size={28} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                        </div>
-                                                        {isEpWatched && <div className="absolute bottom-0 left-0 right-0 h-1 bg-green-500"></div>}
+                                                <div key={ep.id} className={`flex gap-4 p-2 rounded-lg group transition-colors relative ${isUnaired ? 'opacity-70' : 'hover:bg-neutral-800'}`}>
+                                                    <div tabIndex={isUnaired ? -1 : 0} onClick={() => !isUnaired && launchPlayer(details, season, ep.episode_number, ep.name, details)} onKeyDown={(e) => e.key === 'Enter' && !isUnaired && launchPlayer(details, season, ep.episode_number, ep.name, details)} className={`relative w-32 aspect-video flex-shrink-0 rounded overflow-hidden bg-neutral-800 ${!isUnaired ? 'cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none' : ''}`}>
+                                                        {ep.still_path && <img src={`https://image.tmdb.org/t/p/w300${ep.still_path}`} className={`w-full h-full object-cover ${isEpWatched ? 'opacity-40' : (isUnaired ? 'opacity-50' : 'opacity-80 group-hover:opacity-100')}`} />}
+                                                        
+                                                        {!isUnaired && (
+                                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                                <PlayCircle size={28} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                            </div>
+                                                        )}
+                                                        {isUnaired && (
+                                                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                                                                <Clock size={24} className="text-white opacity-80" />
+                                                            </div>
+                                                        )}
+                                                        {isEpWatched && !isUnaired && <div className="absolute bottom-0 left-0 right-0 h-1 bg-green-500"></div>}
                                                     </div>
                                                     <div className="flex flex-col justify-center flex-grow min-w-0">
                                                         <div className="flex justify-between items-start mb-1">
-                                                            <span onClick={() => launchPlayer(details, season, ep.episode_number, ep.name, details)} className={`text-sm font-bold line-clamp-1 cursor-pointer hover:underline ${isEpWatched ? 'text-gray-500' : 'text-white'}`}>{ep.episode_number}. {ep.name}</span>
-                                                            <button onClick={() => handleToggleWatch(ep)} className="text-gray-500 hover:text-white p-1" title={isEpWatched ? "Mark as unseen" : "Mark as watched"}>
-                                                                {isEpWatched ? <CheckCircle2 size={18} className="text-green-500"/> : <Circle size={18} />}
-                                                            </button>
+                                                            <span onClick={() => !isUnaired && launchPlayer(details, season, ep.episode_number, ep.name, details)} className={`text-sm font-bold line-clamp-1 ${!isUnaired ? 'cursor-pointer hover:underline text-white' : 'text-gray-400'} ${isEpWatched ? 'text-gray-500' : ''}`}>
+                                                                {ep.episode_number}. {ep.name}
+                                                            </span>
+                                                            {!isUnaired && (
+                                                                <button onClick={() => handleToggleWatch(ep)} className="text-gray-500 hover:text-white p-1" title={isEpWatched ? "Mark as unseen" : "Mark as watched"}>
+                                                                    {isEpWatched ? <CheckCircle2 size={18} className="text-green-500"/> : <Circle size={18} />}
+                                                                </button>
+                                                            )}
                                                         </div>
-                                                        <p className={`text-xs line-clamp-2 ${isEpWatched ? 'text-gray-600' : 'text-gray-400'}`}>{ep.overview}</p>
+                                                        {isUnaired && <p className="text-[10px] text-amber-500 font-bold mb-1 tracking-wide uppercase">Airs: {formatDate(ep.air_date)}</p>}
+                                                        <p className={`text-xs line-clamp-2 ${isEpWatched ? 'text-gray-600' : 'text-gray-400'}`}>{ep.overview || (isUnaired ? 'Episode synopsis will be available after airing.' : '')}</p>
                                                     </div>
                                                 </div>
                                             )})}

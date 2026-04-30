@@ -105,6 +105,7 @@
             // NEW Tracking State
             const [watchedEpisodes, setWatchedEpisodes] = useState(() => { try { return JSON.parse(localStorage.getItem('vaWatched')) || {}; } catch(e) { return {}; } });
             const [customLists, setCustomLists] = useState(() => { try { return JSON.parse(localStorage.getItem('vaCustomLists')) || []; } catch(e) { return []; } });
+            const [hideAdult, setHideAdult] = useState(() => { try { const saved = localStorage.getItem('vaHideAdult'); return saved !== null ? JSON.parse(saved) : true; } catch(e) { return true; } });
 
             // UI State
             const [activeTab, setActiveTab] = useState('home'); 
@@ -117,6 +118,7 @@
             useEffect(() => localStorage.setItem('vaHistory', JSON.stringify(historyList)), [historyList]);
             useEffect(() => localStorage.setItem('vaWatched', JSON.stringify(watchedEpisodes)), [watchedEpisodes]);
             useEffect(() => localStorage.setItem('vaCustomLists', JSON.stringify(customLists)), [customLists]);
+            useEffect(() => localStorage.setItem('vaHideAdult', JSON.stringify(hideAdult)), [hideAdult]);
             
             useEffect(() => localStorage.setItem('vaServer', selectedServerId), [selectedServerId]);
             useEffect(() => localStorage.setItem('vaTmdbKey', tmdbKey), [tmdbKey]);
@@ -263,13 +265,13 @@
 
                 useEffect(() => {
                     if (url && !items) {
-                        fetch(`https://api.themoviedb.org/3${url}${url.includes('?') ? '&' : '?'}api_key=${tmdbKey}&language=${dbLanguage}`)
+                        fetch(`https://api.themoviedb.org/3${url}${url.includes('?') ? '&' : '?'}api_key=${tmdbKey}&language=${dbLanguage}&include_adult=${!hideAdult}`)
                             .then(res => res.json()).then(data => {
-                                setRowItems((data.results || []).filter(i => i.poster_path && !i.known_for));
+                                setRowItems((data.results || []).filter(i => i.poster_path && !i.known_for && (hideAdult ? !i.adult : true)));
                                 setLoading(false);
                             }).catch(() => setLoading(false));
                     }
-                }, [url, tmdbKey, dbLanguage, items]);
+                }, [url, tmdbKey, dbLanguage, items, hideAdult]);
 
                 if (!loading && rowItems.length === 0) return null;
 
@@ -285,7 +287,7 @@
                         <div className="flex overflow-x-auto gap-3 px-4 pb-2 hide-scrollbar snap-x">
                             {loading ? <div className="w-full flex gap-3">{[1,2,3,4,5].map(i => <div key={i} className="w-28 h-40 bg-[#1e1e1e] rounded-md flex-shrink-0 animate-pulse"></div>)}</div> : 
                                 rowItems.map(item => (
-                                    <div key={item.id} onClick={() => openDetails(item)} className="w-28 flex-shrink-0 cursor-pointer snap-start transition-transform hover:scale-105 relative">
+                                    <div key={item.id} tabIndex={0} onClick={() => openDetails(item)} onKeyDown={(e) => e.key === 'Enter' && openDetails(item)} className="w-28 flex-shrink-0 cursor-pointer snap-start transition-transform hover:scale-105 focus:scale-105 focus:ring-2 focus:ring-indigo-500 focus:z-10 outline-none relative rounded-md">
                                         <img src={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster} alt={item.title || item.name} className="w-full h-40 object-cover rounded-md shadow-lg" loading="lazy" />
                                         <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 backdrop-blur-md">
                                             <Star size={10} className="fill-amber-400 text-amber-400" /> {item.vote_average ? item.vote_average.toFixed(1) : 'NR'}
@@ -329,7 +331,7 @@
                                 }
 
                                 return (
-                                <div key={item.historyId} onClick={() => openDetails(item)} className="w-40 flex-shrink-0 cursor-pointer snap-start relative group">
+                                <div key={item.historyId} tabIndex={0} onClick={() => openDetails(item)} onKeyDown={(e) => e.key === 'Enter' && openDetails(item)} className="w-40 flex-shrink-0 cursor-pointer snap-start relative group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:z-10 rounded-md">
                                     <div className="relative w-full aspect-video rounded-md overflow-hidden bg-neutral-800 border border-neutral-700">
                                         <img src={item.backdrop || item.Poster} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
                                         <div className="absolute inset-0 flex items-center justify-center">
@@ -441,7 +443,7 @@
                                 <div className="w-full flex gap-3">{[1,2,3].map(i => <div key={i} className="w-40 aspect-video bg-[#1e1e1e] rounded-md flex-shrink-0 animate-pulse"></div>)}</div>
                             ) : (
                                 showsWithNewEps.map(item => (
-                                    <div key={item.id} onClick={() => openDetails(item)} className="w-40 flex-shrink-0 cursor-pointer snap-start relative group">
+                                    <div key={item.id} tabIndex={0} onClick={() => openDetails(item)} onKeyDown={(e) => e.key === 'Enter' && openDetails(item)} className="w-40 flex-shrink-0 cursor-pointer snap-start relative group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:z-10 rounded-md">
                                         <div className="relative w-full aspect-video rounded-md overflow-hidden bg-neutral-800 border border-red-500/40">
                                             <img src={item.newEpInfo.still_path ? `https://image.tmdb.org/t/p/w300${item.newEpInfo.still_path}` : item.backdrop || item.Poster} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
                                             <div className="absolute inset-0 flex items-center justify-center">
@@ -475,14 +477,14 @@
                     }
                     setLoading(true);
                     const sep = config.url.includes('?') ? '&' : '?';
-                    fetch(`https://api.themoviedb.org/3${config.url}${sep}api_key=${tmdbKey}&language=${dbLanguage}&page=${page}`)
+                    fetch(`https://api.themoviedb.org/3${config.url}${sep}api_key=${tmdbKey}&language=${dbLanguage}&page=${page}&include_adult=${!hideAdult}`)
                         .then(res => res.json()).then(data => {
-                            const valid = (data.results || []).filter(i => i.poster_path && !i.known_for);
+                            const valid = (data.results || []).filter(i => i.poster_path && !i.known_for && (hideAdult ? !i.adult : true));
                             setItems(prev => page === 1 ? valid : [...prev, ...valid]);
                             setHasMore(data.page < data.total_pages);
                             setLoading(false);
                         }).catch(() => setLoading(false));
-                }, [config.url, page, tmdbKey, dbLanguage]);
+                }, [config.url, page, tmdbKey, dbLanguage, hideAdult]);
 
                 return (
                     <div className="pt-8 pb-24 px-4 max-w-5xl mx-auto min-h-screen animate-in fade-in" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -493,7 +495,7 @@
                         {items.length === 0 && !loading && <div className="text-center text-gray-500 py-10">This list is empty.</div>}
                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4">
                             {items.map(item => (
-                                <div key={item.id} onClick={() => openDetails(item)} className="cursor-pointer transition-transform hover:scale-105 relative">
+                                <div key={item.id} tabIndex={0} onClick={() => openDetails(item)} onKeyDown={(e) => e.key === 'Enter' && openDetails(item)} className="cursor-pointer transition-transform hover:scale-105 focus:scale-105 focus:ring-2 focus:ring-indigo-500 focus:z-10 outline-none relative rounded-md">
                                     <img src={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster} className="w-full aspect-[2/3] object-cover rounded-md shadow-lg" loading="lazy" />
                                     <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 backdrop-blur-md">
                                         <Star size={10} className="fill-amber-400 text-amber-400" /> {item.vote_average ? item.vote_average.toFixed(1) : 'NR'}
@@ -529,17 +531,17 @@
                     setLoading(true);
                     const baseUrl = type === 'movie' ? '/discover/movie' : '/discover/tv';
                     const yearParam = type === 'movie' ? 'primary_release_year' : 'first_air_date_year';
-                    const url = `${baseUrl}?sort_by=popularity.desc${genre ? `&with_genres=${genre}` : ''}${year ? `&${yearParam}=${year}` : ''}&api_key=${tmdbKey}&language=${dbLanguage}&page=${page}`;
+                    const url = `${baseUrl}?sort_by=popularity.desc${genre ? `&with_genres=${genre}` : ''}${year ? `&${yearParam}=${year}` : ''}&api_key=${tmdbKey}&language=${dbLanguage}&page=${page}&include_adult=${!hideAdult}`;
 
                     fetch(`https://api.themoviedb.org/3${url}`)
                         .then(res => res.json())
                         .then(data => {
-                            const valid = (data.results || []).filter(i => i.poster_path && !i.known_for);
+                            const valid = (data.results || []).filter(i => i.poster_path && !i.known_for && (hideAdult ? !i.adult : true));
                             setItems(prev => page === 1 ? valid : [...prev, ...valid]);
                             setHasMore(data.page < data.total_pages);
                             setLoading(false);
                         }).catch(() => setLoading(false));
-                }, [type, genre, year, page, tmdbKey, dbLanguage]);
+                }, [type, genre, year, page, tmdbKey, dbLanguage, hideAdult]);
 
                 if (!genre && !year) return null;
 
@@ -548,7 +550,7 @@
                         {items.length === 0 && !loading && <div className="text-center text-gray-500 py-10">No results found for this filter.</div>}
                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4">
                             {items.map(item => (
-                                <div key={item.id} onClick={() => openDetails(item)} className="cursor-pointer transition-transform hover:scale-105 relative">
+                                <div key={item.id} tabIndex={0} onClick={() => openDetails(item)} onKeyDown={(e) => e.key === 'Enter' && openDetails(item)} className="cursor-pointer transition-transform hover:scale-105 focus:scale-105 focus:ring-2 focus:ring-indigo-500 focus:z-10 outline-none relative rounded-md">
                                     <img src={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster} className="w-full aspect-[2/3] object-cover rounded-md shadow-lg" loading="lazy" />
                                     <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 backdrop-blur-md">
                                         <Star size={10} className="fill-amber-400 text-amber-400" /> {item.vote_average ? item.vote_average.toFixed(1) : 'NR'}
@@ -572,10 +574,11 @@
                 useEffect(() => {
                     fetch(`https://api.themoviedb.org/3${endpoint}?api_key=${tmdbKey}&language=${dbLanguage}`)
                         .then(res => res.json()).then(data => {
-                            const valid = data.results?.find(i => i.backdrop_path && i.overview);
-                            setHeroItem(valid || data.results?.[0]);
+                            const validList = (data.results || []).filter(i => hideAdult ? !i.adult : true);
+                            const valid = validList.find(i => i.backdrop_path && i.overview);
+                            setHeroItem(valid || validList[0]);
                         });
-                }, [endpoint, tmdbKey, dbLanguage]);
+                }, [endpoint, tmdbKey, dbLanguage, hideAdult]);
 
                 if (!heroItem) return <div className="h-[60vh] w-full bg-neutral-900 animate-pulse"></div>;
                 const isFav = favorites.some(f => f.id === heroItem.id);
@@ -659,8 +662,24 @@
                     if (nextEp) nextEpToPlay = nextEp;
                 }
 
-                // NEW: Find the official YouTube trailer
-                const trailer = details.videos?.results?.find(v => v.type === 'Trailer' && v.site === 'YouTube') || details.videos?.results?.find(v => v.site === 'YouTube');
+                // Find trailer, prioritizing non-YouTube sources (like Vimeo) to avoid embedding blocks
+                const videos = details.videos?.results || [];
+                const trailer = videos.find(v => v.type === 'Trailer' && v.site !== 'YouTube')
+                             || videos.find(v => v.type === 'Trailer' && v.site === 'YouTube')
+                             || videos.find(v => v.site !== 'YouTube')
+                             || videos.find(v => v.site === 'YouTube');
+
+                const getEmbedSrc = (video) => {
+                    if (!video) return '';
+                    if (video.site === 'Vimeo') return `https://player.vimeo.com/video/${video.key}?autoplay=1`;
+                    return `https://www.youtube.com/embed/${video.key}?autoplay=1`;
+                };
+
+                const getExternalLink = (video) => {
+                    if (!video) return '';
+                    if (video.site === 'Vimeo') return `https://vimeo.com/${video.key}`;
+                    return `https://www.youtube.com/watch?v=${video.key}`;
+                };
 
                 return (
                     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 sm:p-4 animate-in fade-in" onClick={onClose}>
@@ -671,13 +690,18 @@
                                     <>
                                         <iframe 
                                             className="absolute inset-0 w-full h-full z-10" 
-                                            src={`https://www.youtube.com/embed/${trailer.key}?autoplay=1`} 
+                                            src={getEmbedSrc(trailer)} 
                                             allow="autoplay; encrypted-media; fullscreen" 
                                             allowFullScreen
                                         ></iframe>
                                         <button onClick={(e) => { e.stopPropagation(); setShowTrailer(false); }} className={`absolute top-4 ${isRTL ? 'right-4' : 'left-4'} z-20 bg-black/60 p-2 rounded-full text-white hover:bg-black/80 backdrop-blur-md`}>
                                             <ArrowLeft size={20} className={isRTL ? 'rotate-180' : ''} />
                                         </button>
+                                        
+                                        {/* Fallback button in case the studio disabled embedded playback */}
+                                        <a href={getExternalLink(trailer)} target="_blank" rel="noopener noreferrer" className={`absolute top-4 ${isRTL ? 'left-4' : 'right-4'} z-30 ${trailer.site === 'Vimeo' ? 'bg-blue-500/90 hover:bg-blue-500' : 'bg-red-600/90 hover:bg-red-600'} px-3 py-1.5 rounded-full text-white backdrop-blur-md text-xs font-bold flex items-center gap-1.5 shadow-lg transition-colors`}>
+                                            Open in {trailer.site} <ExternalLink size={12} />
+                                        </a>
                                     </>
                                 ) : (
                                     <img src={`https://image.tmdb.org/t/p/w780${details.backdrop_path || details.poster_path}`} className="w-full h-full object-cover"/>
@@ -789,7 +813,7 @@
                                                     const isEpWatched = showWatchedMap[season]?.includes(ep.episode_number);
                                                     return (
                                                     <div key={ep.id} className="flex gap-4 p-2 hover:bg-neutral-800 rounded-lg group transition-colors relative">
-                                                        <div onClick={() => launchPlayer(details, season, ep.episode_number, ep.name, details)} className="relative w-32 aspect-video flex-shrink-0 rounded overflow-hidden bg-neutral-800 cursor-pointer">
+                                                        <div tabIndex={0} onClick={() => launchPlayer(details, season, ep.episode_number, ep.name, details)} onKeyDown={(e) => e.key === 'Enter' && launchPlayer(details, season, ep.episode_number, ep.name, details)} className="relative w-32 aspect-video flex-shrink-0 rounded overflow-hidden bg-neutral-800 cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none">
                                                             {ep.still_path && <img src={`https://image.tmdb.org/t/p/w300${ep.still_path}`} className={`w-full h-full object-cover ${isEpWatched ? 'opacity-40' : 'opacity-80 group-hover:opacity-100'}`} />}
                                                             <div className="absolute inset-0 flex items-center justify-center">
                                                                 <PlayCircle size={28} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1097,17 +1121,17 @@
                 const [topSearches, setTopSearches] = useState([]);
                 const [loading, setLoading] = useState(false);
 
-                useEffect(() => { fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${tmdbKey}&language=${dbLanguage}`).then(res => res.json()).then(data => setTopSearches(data.results || [])); }, [tmdbKey, dbLanguage]);
+                useEffect(() => { fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${tmdbKey}&language=${dbLanguage}`).then(res => res.json()).then(data => setTopSearches((data.results || []).filter(i => hideAdult ? !i.adult : true))); }, [tmdbKey, dbLanguage, hideAdult]);
 
                 useEffect(() => {
                     if (!searchQuery.trim()) { setResults([]); return; }
                     setLoading(true);
                     const handler = setTimeout(() => {
-                        fetch(`https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&language=${dbLanguage}&query=${encodeURIComponent(searchQuery)}`)
-                            .then(res => res.json()).then(data => { setResults((data.results || []).filter(i => i.media_type !== 'person' && i.backdrop_path)); setLoading(false); });
+                        fetch(`https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&language=${dbLanguage}&query=${encodeURIComponent(searchQuery)}&include_adult=${!hideAdult}`)
+                            .then(res => res.json()).then(data => { setResults((data.results || []).filter(i => i.media_type !== 'person' && i.backdrop_path && (hideAdult ? !i.adult : true))); setLoading(false); });
                     }, 500);
                     return () => clearTimeout(handler);
-                }, [searchQuery, tmdbKey, dbLanguage]);
+                }, [searchQuery, tmdbKey, dbLanguage, hideAdult]);
 
                 const displayList = searchQuery.trim() ? results : topSearches;
 
@@ -1122,7 +1146,7 @@
                         {loading ? <LoadingSpinner/> : (
                             <div className="space-y-4">
                                 {displayList.map(item => (
-                                    <div key={item.id} onClick={() => openDetails(item)} className="flex items-center gap-4 cursor-pointer group hover:bg-[#1e1e1e] p-2 rounded-lg transition-colors">
+                                    <div key={item.id} tabIndex={0} onClick={() => openDetails(item)} onKeyDown={(e) => e.key === 'Enter' && openDetails(item)} className="flex items-center gap-4 cursor-pointer group hover:bg-[#1e1e1e] focus:bg-[#1e1e1e] focus:ring-2 focus:ring-indigo-500 outline-none p-2 rounded-lg transition-colors">
                                         <div className="relative w-32 aspect-video rounded overflow-hidden bg-neutral-800 flex-shrink-0">
                                             <img src={`https://image.tmdb.org/t/p/w300${item.backdrop_path || item.poster_path}`} className="w-full h-full object-cover" />
                                             <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 backdrop-blur-md"><Star size={8} className="fill-amber-400 text-amber-400" /> {item.vote_average ? item.vote_average.toFixed(1) : 'NR'}</div>
@@ -1327,6 +1351,16 @@
                             {/* SETTINGS TAB (Hidden from subnav, accessed via gear) */}
                             {activeProfileTab === 'settings' && (
                                 <div className="animate-in fade-in space-y-6">
+                                    <div className="bg-[#181818] p-4 rounded-xl border border-gray-800 flex justify-between items-center">
+                                        <div>
+                                            <span className="font-bold text-sm block">Safe Search (+18)</span>
+                                            <span className="text-xs text-gray-400">Hide adult content and explicit TMDB results.</span>
+                                        </div>
+                                        <button onClick={() => setHideAdult(!hideAdult)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-[#181818] ${hideAdult ? 'bg-indigo-500' : 'bg-gray-600'}`}>
+                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hideAdult ? 'translate-x-6' : 'translate-x-1'}`} />
+                                        </button>
+                                    </div>
+
                                     <div className="bg-[#181818] p-4 rounded-xl border border-gray-800">
                                         <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2"><KeySquare size={18} className="text-indigo-400"/> IPTV Configuration</h2>
                                         <div className="bg-amber-900/20 border border-amber-500/20 text-amber-400/90 text-xs p-3 rounded mb-4 flex gap-2">
@@ -1382,7 +1416,7 @@
                                 const Icon = tab.icon;
                                 const isActive = activeTab === tab.id;
                                 return (
-                                    <button key={tab.id} onClick={() => {setActiveTab(tab.id); setSeeAllConfig(null); window.scrollTo(0,0);}} className={`flex flex-col items-center gap-1 ${isActive ? 'text-white' : 'text-gray-500 hover:text-gray-300'} transition-colors`}>
+                                    <button key={tab.id} onClick={() => {setActiveTab(tab.id); setSeeAllConfig(null); window.scrollTo(0,0);}} className={`flex flex-col items-center gap-1 focus:outline-none focus:text-indigo-400 focus:scale-110 ${isActive ? 'text-white' : 'text-gray-500 hover:text-gray-300'} transition-all`}>
                                         <Icon size={22} className={isActive ? 'stroke-current' : ''} />
                                         <span className="text-[9px] font-medium">{tab.label}</span>
                                     </button>

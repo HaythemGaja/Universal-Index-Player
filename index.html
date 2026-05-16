@@ -38,14 +38,13 @@
         import { Play, Search, Film, Tv, Settings, Heart, History, Trash2, X, Server, ChevronDown, ChevronRight, PlayCircle, AlertCircle, Globe, Star, Cast, Info, Plus, Check, MonitorPlay, Home, Copy, CheckCheck, ArrowLeft, ExternalLink, KeySquare, Database, User, ListPlus, BarChart2, CheckCircle2, Circle, Share2, Clock, PieChart, Sparkles, Bell, Filter } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- Configurations ---
-        const SERVERS = [
-          { id: 'streamimdb', name: 'StreamIMDb', getUrl: (t, tmdb, imdb, s, e) => `https://streamimdb.me/embed/${t}/${imdb || tmdb}${t==='tv'&&s&&e?`/${s}/${e}`:''}` },
-          { id: 'vaplayer', name: 'VAPlayer', getUrl: (t, tmdb, imdb, s, e) => `https://vaplayer.ru/embed/${t}/${imdb || tmdb}${t==='tv'&&s&&e?`?s=${s}&e=${e}`:''}` },
-          { id: 'vidsrc', name: 'VidSrc', getUrl: (t, tmdb, imdb, s, e) => `https://vidsrc.me/embed/${t}?tmdb=${tmdb}${t==='tv'&&s&&e?`&season=${s}&episode=${e}`:''}` },
-          { id: 'autoembed', name: 'AutoEmbed', getUrl: (t, tmdb, imdb, s, e) => `https://autoembed.to/${t}/tmdb/${tmdb}${t==='tv'&&s&&e?`-${s}-${e}`:''}` },
-          { id: 'smashy', name: 'SmashyStream', getUrl: (t, tmdb, imdb, s, e) => `https://player.smashy.stream/${t}/${tmdb}${t==='tv'&&s&&e?`?s=${s}&e=${e}`:''}` },
-          { id: 'vidsrcpro', name: 'VidSrc Pro', getUrl: (t, tmdb, imdb, s, e) => `https://vidsrc.cc/v2/embed/${t}/${tmdb}${t==='tv'&&s&&e?`/${s}/${e}`:''}` },
-          { id: 'iptv', name: 'My IPTV Subscription', getUrl: () => '' }
+        const DEFAULT_SERVERS = [
+          { id: 'streamimdb', name: 'StreamIMDb', urlTemplate: 'https://streamimdb.me/embed/{type}/{imdb}/{s}/{e}' },
+          { id: 'vaplayer', name: 'VAPlayer', urlTemplate: 'https://vaplayer.ru/embed/{type}/{imdb}?s={s}&e={e}' },
+          { id: 'vidsrc', name: 'VidSrc', urlTemplate: 'https://vidsrc.me/embed/{type}?tmdb={tmdb}&season={s}&episode={e}' },
+          { id: 'autoembed', name: 'AutoEmbed', urlTemplate: 'https://autoembed.to/{type}/tmdb/{tmdb}-{s}-{e}' },
+          { id: 'smashy', name: 'SmashyStream', urlTemplate: 'https://player.smashy.stream/{type}/{tmdb}?s={s}&e={e}' },
+          { id: 'vidsrcpro', name: 'VidSrc Pro', urlTemplate: 'https://vidsrc.cc/v2/embed/{type}/{tmdb}/{s}/{e}' }
         ];
 
         const ROW_CONFIGS = {
@@ -136,55 +135,105 @@
 
         const ContinueWatchingRow = ({ filterType = 'all' }) => {
             const { historyList, setHistoryList, watchedEpisodes, openDetails } = React.useContext(AppContext);
+            
+            // If history is empty, don't render the row at all
             if (historyList.length === 0) return null;
+
             const uniqueHistory = [];
             const seenIds = new Set();
+
+            // Filter history to ensure we only show unique items based on the current tab (Movies vs TV)
             historyList.forEach(item => {
-                const matchesFilter = filterType === 'all' || item.Type === filterType || (filterType === 'tv' && item.Type === 'series');
-                if (!seenIds.has(item.id) && matchesFilter) { 
-                    seenIds.add(item.id); 
+                const matchesFilter = filterType === 'all' || 
+                                      item.Type === filterType || 
+                                      (filterType === 'tv' && item.Type === 'series') ||
+                                      (item.source === 'iptv' && item.type === filterType);
+                
+                const uniqueKey = item.source === 'iptv' ? `iptv-${item.id}` : item.id;
+                
+                if (!seenIds.has(uniqueKey) && matchesFilter) { 
+                    seenIds.add(uniqueKey); 
                     uniqueHistory.push(item); 
                 } 
             });
 
             if (uniqueHistory.length === 0) return null;
 
+            const headerTitle = filterType === 'live' ? 'Recent Channels' : 'Continue Watching';
+
             return (
                 <div className="mb-6 mt-4">
-                    <h2 className="text-base font-bold text-white tracking-wide px-4 mb-2">Continue Watching</h2>
+                    <h2 className="text-base font-bold text-white tracking-wide px-4 mb-2">{headerTitle}</h2>
+                    
                     <div className="flex overflow-x-auto gap-3 px-4 pb-2 hide-scrollbar snap-x">
+                        {/* Slice to show only the 15 most recent items */}
                         {uniqueHistory.slice(0, 15).map(item => {
                             const watchedData = watchedEpisodes[item.id] || {};
                             let displaySeason = item.season;
                             let displayEp = item.episode;
                             let isWatched = false;
                             
+                            // Check if this specific episode was marked as watched
                             if ((item.Type === 'tv' || item.Type === 'series') && watchedData[item.season]?.includes(parseInt(item.episode))) {
                                 isWatched = true; 
                             }
 
+                            const isLive = item.source === 'iptv' && item.type === 'live';
+
                             return (
-                            <div key={item.historyId} tabIndex={0} onClick={() => openDetails(item)} onKeyDown={(e) => e.key === 'Enter' && openDetails(item)} className="w-40 flex-shrink-0 cursor-pointer snap-start relative group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:z-10 rounded-md">
-                                <div className="relative w-full aspect-video rounded-md overflow-hidden bg-neutral-800 border border-neutral-700">
-                                    <img src={item.backdrop || item.Poster} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <PlayCircle size={36} className="text-white shadow-xl opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all" />
+                            <div 
+                                key={item.historyId} 
+                                tabIndex={0} 
+                                onClick={() => openDetails(item)} // Opens TMDB Details Modal
+                                onKeyDown={(e) => e.key === 'Enter' && openDetails(item)}
+                                className={`flex-shrink-0 cursor-pointer snap-start relative group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:z-10 rounded-md ${isLive ? 'w-32' : 'w-40'}`}
+                            >
+                                
+                                <div className={`relative w-full ${isLive ? 'aspect-[4/3] bg-neutral-900 p-2' : 'aspect-video bg-neutral-800'} rounded-md overflow-hidden border border-neutral-700 flex flex-col items-center justify-center`}>
+                                    {/* Backdrop Image */}
+                                    <img 
+                                        src={item.backdrop || item.Poster || item.icon} 
+                                        className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity z-0" 
+                                        onError={(e) => e.target.style.display='none'} 
+                                    />
+
+                                    {/* Hover Play Icon */}
+                                    <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/0 group-hover:bg-black/40 transition-colors">
+                                        <PlayCircle size={36} className="text-white shadow-xl opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all" />
                                     </div>
-                                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-700">
-                                        <div className={`h-full ${isWatched ? 'bg-green-500 w-full' : 'bg-indigo-500 w-2/3'}`}></div>
-                                    </div>
+
+                                    {/* Progress Bar (Green if watched, Purple if partially watched/Movie) */}
+                                    {!isLive && (
+                                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-700 z-10">
+                                            <div className={`h-full ${isWatched ? 'bg-green-500 w-full' : 'bg-indigo-500 w-2/3'}`}></div>
+                                        </div>
+                                    )}
+
+                                    {/* Remove from History 'X' Button */}
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); setHistoryList(prev => prev.filter(h => h.id !== item.id)); }}
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            setHistoryList(prev => prev.filter(h => h.historyId !== item.historyId)); 
+                                        }}
                                         className="absolute top-2 right-2 bg-black/80 hover:bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all z-20 shadow-lg"
                                         title="Remove from history"
                                     >
                                         <X size={14} />
                                     </button>
                                 </div>
-                                <div className="mt-1 flex justify-between items-start">
-                                    <div className="flex flex-col">
+                                
+                                {/* Text Metadata below the image */}
+                                <div className="mt-1 flex justify-between items-start px-1">
+                                    <div className={`flex flex-col w-full ${isLive ? 'text-center' : 'text-left'}`}>
                                         <span className="text-xs font-semibold text-gray-200 line-clamp-1">{item.Title}</span>
-                                        <span className="text-[10px] text-gray-400">{(item.Type === 'tv' || item.Type === 'series') ? `S${displaySeason}:E${displayEp}` : 'Movie'} {isWatched && '✓'}</span>
+                                        {!isLive && (
+                                            <span className="text-[10px] text-gray-400">
+                                                {/* Shows "S1:E1" for TV, or "Movie" */}
+                                                {item.source === 'iptv' ? (item.epTitle || 'VOD') : ((item.Type === 'tv' || item.Type === 'series') ? `S${displaySeason}:E${displayEp}` : 'Movie')}
+                                                {/* Adds a checkmark if episode is fully watched */}
+                                                {isWatched && ' ✓'}
+                                            </span>                            
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -386,6 +435,7 @@
 
         const DetailsModal = ({ media, onClose }) => {
             const { tmdbKey, dbLanguage, watchedEpisodes, markEpisodeWatched, favorites, toggleFavorite, customLists, toggleItemInList, launchPlayer } = React.useContext(AppContext);
+            const isRTL = dbLanguage === 'ar';
             const [details, setDetails] = useState(null);
             const [episodes, setEpisodes] = useState([]);
             const [season, setSeason] = useState(1);
@@ -402,8 +452,17 @@
                     .then(res => res.json()).then(data => {
                         setDetails(data);
                         if (type === 'tv' && data.seasons?.length > 0) {
-                            const watchedS = Object.keys(watchedEpisodes[media.id] || {}).pop();
-                            const targetSeason = watchedS ? parseInt(watchedS) : (data.seasons.find(s => s.season_number > 0)?.season_number || 1);
+                            let targetSeason = 1;
+                            if (media.season) {
+                                targetSeason = parseInt(media.season);
+                            } else {
+                                const watchedKeys = Object.keys(watchedEpisodes[media.id] || {}).map(Number).filter(n => !isNaN(n));
+                                if (watchedKeys.length > 0) {
+                                    targetSeason = Math.max(...watchedKeys);
+                                } else {
+                                    targetSeason = data.seasons.find(s => s.season_number > 0)?.season_number || 1;
+                                }
+                            }
                             setSeason(targetSeason);
                         } else {
                             setLoading(false);
@@ -435,18 +494,24 @@
             let isNextEpUnaired = false;
             
             if (type === 'tv' && episodes.length > 0) {
-                const watchedInSeason = showWatchedMap[season] || [];
-                // Only consider episodes that have aired
                 const availableEpisodes = episodes.filter(e => !isFutureDate(e.air_date));
                 
-                if (availableEpisodes.length > 0) {
+                // 1. If opened from history, prioritize the exact episode they clicked
+                if (media.season && parseInt(media.season) === season && media.episode) {
+                    nextEpToPlay = episodes.find(e => e.episode_number === parseInt(media.episode)) || episodes[0];
+                } 
+                // 2. Otherwise find the next unwatched episode
+                else if (availableEpisodes.length > 0) {
+                    const watchedInSeason = showWatchedMap[season] || [];
                     const nextEp = availableEpisodes.find(e => !watchedInSeason.includes(e.episode_number));
                     if (nextEp) {
                         nextEpToPlay = nextEp;
                     } else {
                         nextEpToPlay = availableEpisodes[availableEpisodes.length - 1]; // Fallback to last aired
                     }
-                } else {
+                } 
+                // 3. Fallback for unaired seasons
+                else {
                     nextEpToPlay = episodes[0];
                     isNextEpUnaired = true; // Flag to disable season resume button
                 }
@@ -501,33 +566,35 @@
             };
 
             return (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 sm:p-4 animate-in fade-in" onClick={onClose}>
-                    <div className="bg-[#181818] w-full sm:max-w-2xl sm:rounded-xl h-[85vh] sm:h-[80vh] overflow-y-auto hide-scrollbar relative shadow-2xl" onClick={e => e.stopPropagation()}>
-                        <button onClick={onClose} className="absolute top-4 right-4 z-20 bg-neutral-900/60 p-2 rounded-full text-white hover:bg-neutral-800"><X size={20} /></button>
-                        
+                <div className="fixed inset-0 z-[60] bg-[#0f0f0f] overflow-y-auto hide-scrollbar animate-in slide-in-from-bottom-4" onClick={e => e.stopPropagation()} dir={isRTL ? 'rtl' : 'ltr'}>
+                    <button onClick={onClose} className={`fixed top-4 ${isRTL ? 'left-4' : 'right-4'} z-[70] bg-black/60 p-3 rounded-full text-white hover:bg-black/80 backdrop-blur-md transition-all shadow-xl`}>
+                        <X size={24} />
+                    </button>
+                    
+                    <div className="w-full max-w-6xl mx-auto bg-[#131313] min-h-screen shadow-2xl relative pb-20 border-x border-neutral-900">
                         {/* Trailer/Hero Section */}
-                        <div className="relative w-full aspect-video bg-black">
+                        <div className="relative w-full aspect-video md:aspect-[21/9] bg-black">
                             {showTrailer && trailer ? (
                                 <>
                                     <iframe className="absolute inset-0 w-full h-full z-10" src={getEmbedSrc(trailer)} allow="autoplay; encrypted-media; fullscreen" allowFullScreen></iframe>
-                                    <button onClick={(e) => { e.stopPropagation(); setShowTrailer(false); }} className="absolute top-4 left-4 z-20 bg-black/60 p-2 rounded-full text-white hover:bg-black/80 backdrop-blur-md">
-                                        <ArrowLeft size={20} />
+                                    <button onClick={(e) => { e.stopPropagation(); setShowTrailer(false); }} className={`absolute top-4 ${isRTL ? 'right-4' : 'left-4'} z-20 bg-black/60 p-3 rounded-full text-white hover:bg-black/80 backdrop-blur-md`}>
+                                        <ArrowLeft size={24} />
                                     </button>
-                                    <a href={getExternalLink(trailer)} target="_blank" rel="noopener noreferrer" className={`absolute top-4 right-4 z-30 ${trailer.site === 'Vimeo' ? 'bg-blue-500/90 hover:bg-blue-500' : 'bg-red-600/90 hover:bg-red-600'} px-3 py-1.5 rounded-full text-white backdrop-blur-md text-xs font-bold flex items-center gap-1.5 shadow-lg transition-colors`}>
-                                        Open in {trailer.site} <ExternalLink size={12} />
+                                    <a href={getExternalLink(trailer)} target="_blank" rel="noopener noreferrer" className={`absolute top-4 ${isRTL ? 'left-4' : 'right-4'} z-30 ${trailer.site === 'Vimeo' ? 'bg-blue-500/90 hover:bg-blue-500' : 'bg-red-600/90 hover:bg-red-600'} px-4 py-2 rounded-full text-white backdrop-blur-md text-sm font-bold flex items-center gap-1.5 shadow-lg transition-colors`}>
+                                        Open in {trailer.site} <ExternalLink size={14} />
                                     </a>
                                 </>
                             ) : (
                                 <img src={`https://image.tmdb.org/t/p/w780${details.backdrop_path || details.poster_path}`} className="w-full h-full object-cover"/>
                             )}
                             {!showTrailer && (
-                                <div className="absolute inset-0 modal-gradient flex items-end p-6 pointer-events-none">
-                                    <h2 className="text-3xl font-extrabold text-white">{details.title || details.name}</h2>
+                                <div className="absolute inset-0 modal-gradient flex items-end p-6 md:p-10 pointer-events-none">
+                                    <h2 className="text-4xl md:text-6xl font-extrabold text-white drop-shadow-xl">{details.title || details.name}</h2>
                                 </div>
                             )}
                         </div>
 
-                        <div className="p-4 sm:p-6 space-y-4">
+                        <div className="p-4 sm:p-8 md:p-10 space-y-6">
                             <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400 font-medium">
                                 <span className="text-green-500 font-bold">{Math.round((details.vote_average || 0) * 10)}% Match</span>
                                 <span className="flex items-center gap-1 text-amber-400"><Star size={14} className="fill-amber-400"/> {details.vote_average ? details.vote_average.toFixed(1) : 'NR'}</span>
@@ -537,36 +604,36 @@
                                 {type === 'tv' && <span>{details.number_of_seasons} Seasons</span>}
                             </div>
 
-                            <div className="flex gap-3">
+                            <div className="flex gap-3 md:gap-4 max-w-xl">
                                 {type === 'movie' ? (
                                     isUnairedMovie ? (
-                                        <button disabled className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 text-neutral-400 py-2.5 rounded font-bold shadow-lg border border-neutral-700 cursor-not-allowed">
-                                            <Clock size={20} /> Premieres {formatDate(details.release_date)}
+                                        <button disabled className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 text-neutral-400 py-3 md:py-4 rounded-xl font-bold shadow-lg border border-neutral-700 cursor-not-allowed">
+                                            <Clock size={22} /> Premieres {formatDate(details.release_date)}
                                         </button>
                                     ) : (
-                                        <button onClick={() => launchPlayer(details, null, null, null, details)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
-                                            <Play size={20} className="fill-black" /> Play Movie
+                                        <button onClick={() => launchPlayer(details, null, null, null, details)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-3 md:py-4 rounded-xl font-bold md:text-lg hover:bg-gray-200 transition-colors shadow-lg">
+                                            <Play size={22} className="fill-black" /> Play Movie
                                         </button>
                                     )
                                 ) : (
                                     isUnairedShow || isNextEpUnaired ? (
-                                        <button disabled className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 text-neutral-400 py-2.5 rounded font-bold shadow-lg border border-neutral-700 cursor-not-allowed">
-                                            <Clock size={20} /> Airs {formatDate(nextEpToPlay?.air_date || details.first_air_date)}
+                                        <button disabled className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 text-neutral-400 py-3 md:py-4 rounded-xl font-bold shadow-lg border border-neutral-700 cursor-not-allowed">
+                                            <Clock size={22} /> Airs {formatDate(nextEpToPlay?.air_date || details.first_air_date)}
                                         </button>
                                     ) : (
-                                        <button onClick={() => nextEpToPlay && launchPlayer(details, season, nextEpToPlay.episode_number, nextEpToPlay.name, details)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-2.5 rounded font-bold hover:bg-gray-200 transition-colors shadow-lg">
-                                            <Play size={20} className="fill-black" /> Resume S{season} E{nextEpToPlay?.episode_number || 1}
+                                        <button onClick={() => nextEpToPlay && launchPlayer(details, season, nextEpToPlay.episode_number, nextEpToPlay.name, details)} className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-3 md:py-4 rounded-xl font-bold md:text-lg hover:bg-gray-200 transition-colors shadow-lg">
+                                            <Play size={22} className="fill-black" /> Resume S{season} E{nextEpToPlay?.episode_number || 1}
                                         </button>
                                     )
                                 )}
                                 {trailer && (
-                                    <button onClick={() => setShowTrailer(true)} className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 text-white py-2.5 rounded font-bold hover:bg-neutral-700 transition-colors shadow-lg border border-neutral-700">
-                                        <Film size={20} /> Trailer
+                                    <button onClick={() => setShowTrailer(true)} className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 text-white py-3 md:py-4 rounded-xl font-bold md:text-lg hover:bg-neutral-700 transition-colors shadow-lg border border-neutral-700">
+                                        <Film size={22} /> Trailer
                                     </button>
                                 )}
                             </div>
 
-                            <p className="text-sm text-gray-200 leading-relaxed">{details.overview || 'No overview available.'}</p>
+                            <p className="text-sm md:text-base text-gray-300 leading-relaxed max-w-4xl">{details.overview || 'No overview available.'}</p>
                             
                             {/* Cast Section */}
                             {details.credits?.cast?.length > 0 && (
@@ -591,30 +658,30 @@
                             )}
 
                             {/* Tracking Controls */}
-                            <div className="flex gap-6 mt-4 pb-4 border-b border-gray-800 relative">
-                                <button onClick={() => toggleFavorite(details)} className="flex flex-col items-center gap-2 text-gray-400 hover:text-white">
+                            <div className="flex gap-6 mt-4 pb-4 border-b border-neutral-800 relative">
+                                <button onClick={() => toggleFavorite(details)} className="flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors">
                                     {isFav ? <Check size={24} className="text-white"/> : <Plus size={24} />}
-                                    <span className="text-[10px]">Watchlist</span>
+                                    <span className="text-[10px] uppercase font-bold tracking-wider">Watchlist</span>
                                 </button>
                                 
-                                <button onClick={() => setShowListMenu(!showListMenu)} className="flex flex-col items-center gap-2 text-gray-400 hover:text-white">
+                                <button onClick={() => setShowListMenu(!showListMenu)} className="flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors">
                                     <ListPlus size={24} />
-                                    <span className="text-[10px]">Add to List</span>
+                                    <span className="text-[10px] uppercase font-bold tracking-wider">Add to List</span>
                                 </button>
 
                                 {/* Dropdown for Custom Lists */}
                                 {showListMenu && (
                                     <>
                                         <div className="fixed inset-0 z-40" onClick={() => setShowListMenu(false)}></div>
-                                        <div className="absolute top-full left-16 mt-2 w-48 bg-[#2b2b2b] border border-gray-700 rounded-lg shadow-2xl overflow-hidden z-50">
-                                            <div className="p-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-700">Save to...</div>
+                                        <div className="absolute top-full left-16 mt-2 w-56 bg-[#2b2b2b] border border-gray-700 rounded-lg shadow-2xl overflow-hidden z-50">
+                                            <div className="p-3 text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-700">Save to...</div>
                                             {customLists.length === 0 ? (
-                                                <div className="p-3 text-xs text-gray-500">No custom lists. Create one in your Profile tab.</div>
+                                                <div className="p-4 text-xs text-gray-500">No custom lists. Create one in your Profile tab.</div>
                                             ) : customLists.map(list => {
                                                 const inList = list.items.some(i => i.id === details.id);
                                                 return (
-                                                <button key={list.id} onClick={() => toggleItemInList(list.id, details)} className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700 hover:text-white">
-                                                    {list.name} {inList && <CheckCircle2 size={14} className="text-indigo-400"/>}
+                                                <button key={list.id} onClick={() => toggleItemInList(list.id, details)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:bg-neutral-700 hover:text-white transition-colors">
+                                                    {list.name} {inList && <CheckCircle2 size={16} className="text-indigo-400"/>}
                                                 </button>
                                             )})}
                                         </div>
@@ -623,10 +690,10 @@
                             </div>
 
                             {type === 'tv' && (
-                                <div className="mt-4">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="font-bold text-lg">Episodes</h3>
-                                        <select value={season} onChange={(e) => setSeason(e.target.value)} className="bg-neutral-800 border border-neutral-700 text-white text-sm rounded px-3 py-1.5 outline-none">
+                                <div className="mt-6">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="font-bold text-xl text-white">Episodes</h3>
+                                        <select value={season} onChange={(e) => setSeason(e.target.value)} className="bg-neutral-800 border border-neutral-700 text-white text-sm rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
                                             {(details.seasons || []).filter(s => s.season_number > 0).map(s => (
                                                 <option key={s.season_number} value={s.season_number}>Season {s.season_number}</option>
                                             ))}
@@ -640,35 +707,37 @@
                                                 const isUnaired = isFutureDate(ep.air_date);
                                                 
                                                 return (
-                                                <div key={ep.id} className={`flex gap-4 p-2 rounded-lg group transition-colors relative ${isUnaired ? 'opacity-70' : 'hover:bg-neutral-800'}`}>
-                                                    <div tabIndex={isUnaired ? -1 : 0} onClick={() => !isUnaired && launchPlayer(details, season, ep.episode_number, ep.name, details)} onKeyDown={(e) => e.key === 'Enter' && !isUnaired && launchPlayer(details, season, ep.episode_number, ep.name, details)} className={`relative w-32 aspect-video flex-shrink-0 rounded overflow-hidden bg-neutral-800 ${!isUnaired ? 'cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none' : ''}`}>
-                                                        {ep.still_path && <img src={`https://image.tmdb.org/t/p/w300${ep.still_path}`} className={`w-full h-full object-cover ${isEpWatched ? 'opacity-40' : (isUnaired ? 'opacity-50' : 'opacity-80 group-hover:opacity-100')}`} />}
+                                                <div key={ep.id} className={`flex gap-4 p-3 rounded-xl group transition-colors relative ${isUnaired ? 'opacity-70' : 'hover:bg-neutral-800/80 border border-transparent hover:border-neutral-700'}`}>
+                                                    <div tabIndex={isUnaired ? -1 : 0} onClick={() => !isUnaired && launchPlayer(details, season, ep.episode_number, ep.name, details)} onKeyDown={(e) => e.key === 'Enter' && !isUnaired && launchPlayer(details, season, ep.episode_number, ep.name, details)} className={`relative w-40 aspect-video flex-shrink-0 rounded-lg overflow-hidden bg-neutral-900 shadow-md ${!isUnaired ? 'cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none' : ''}`}>
+                                                        {ep.still_path && <img src={`https://image.tmdb.org/t/p/w300${ep.still_path}`} className={`w-full h-full object-cover transition-opacity duration-300 ${isEpWatched ? 'opacity-40' : (isUnaired ? 'opacity-50' : 'opacity-80 group-hover:opacity-100')}`} />}
                                                         
                                                         {!isUnaired && (
                                                             <div className="absolute inset-0 flex items-center justify-center">
-                                                                <PlayCircle size={28} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                                <PlayCircle size={32} className="text-white opacity-0 group-hover:opacity-100 transition-all transform scale-75 group-hover:scale-100" />
                                                             </div>
                                                         )}
                                                         {isUnaired && (
                                                             <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                                                                <Clock size={24} className="text-white opacity-80" />
+                                                                <Clock size={28} className="text-white opacity-80" />
                                                             </div>
                                                         )}
-                                                        {isEpWatched && !isUnaired && <div className="absolute bottom-0 left-0 right-0 h-1 bg-green-500"></div>}
+                                                        {isEpWatched && !isUnaired && <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-green-500 shadow-[0_-2px_10px_rgba(34,197,94,0.5)]"></div>}
                                                     </div>
                                                     <div className="flex flex-col justify-center flex-grow min-w-0">
                                                         <div className="flex justify-between items-start mb-1">
-                                                            <span onClick={() => !isUnaired && launchPlayer(details, season, ep.episode_number, ep.name, details)} className={`text-sm font-bold line-clamp-1 ${!isUnaired ? 'cursor-pointer hover:underline text-white' : 'text-gray-400'} ${isEpWatched ? 'text-gray-500' : ''}`}>
+                                                            <span onClick={() => !isUnaired && launchPlayer(details, season, ep.episode_number, ep.name, details)} className={`text-sm md:text-base font-bold line-clamp-1 ${!isUnaired ? 'cursor-pointer hover:underline text-white' : 'text-gray-400'} ${isEpWatched ? 'text-gray-500' : ''}`}>
                                                                 {ep.episode_number}. {ep.name}
                                                             </span>
                                                             {!isUnaired && (
-                                                                <button onClick={() => handleToggleWatch(ep)} className="text-gray-500 hover:text-white p-1" title={isEpWatched ? "Mark as unseen" : "Mark as watched"}>
-                                                                    {isEpWatched ? <CheckCircle2 size={18} className="text-green-500"/> : <Circle size={18} />}
+                                                                <button onClick={() => handleToggleWatch(ep)} className="text-gray-500 hover:text-white p-1 ml-2 flex-shrink-0 transition-colors" title={isEpWatched ? "Mark as unseen" : "Mark as watched"}>
+                                                                    {isEpWatched ? <CheckCircle2 size={20} className="text-green-500"/> : <Circle size={20} />}
                                                                 </button>
                                                             )}
                                                         </div>
-                                                        {isUnaired && <p className="text-[10px] text-amber-500 font-bold mb-1 tracking-wide uppercase">Airs: {formatDate(ep.air_date)}</p>}
-                                                        <p className={`text-xs line-clamp-2 ${isEpWatched ? 'text-gray-600' : 'text-gray-400'}`}>{ep.overview || (isUnaired ? 'Episode synopsis will be available after airing.' : '')}</p>
+                                                        <p className={`text-[10px] font-bold mb-1.5 tracking-wide uppercase ${isUnaired ? 'text-amber-500' : 'text-indigo-400'}`}>
+                                                            {isUnaired ? 'Airs: ' : 'Aired: '} {formatDate(ep.air_date)}
+                                                        </p>
+                                                        <p className={`text-xs md:text-sm line-clamp-2 leading-relaxed ${isEpWatched ? 'text-gray-600' : 'text-gray-400'}`}>{ep.overview || (isUnaired ? 'Episode synopsis will be available after airing.' : '')}</p>
                                                     </div>
                                                 </div>
                                             )})}
@@ -680,7 +749,7 @@
 
                         {/* Confirmation Modal for Marking Previous Episodes */}
                         {confirmMarkPrevious && (
-                            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 px-4" onClick={(e) => e.stopPropagation()}>
+                            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 px-4" onClick={(e) => e.stopPropagation()}>
                                 <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl max-w-sm w-full p-6 shadow-2xl animate-in zoom-in-95">
                                     <h3 className="text-lg font-bold text-white mb-2">Mark Previous Episodes?</h3>
                                     <p className="text-sm text-gray-400 mb-6">You are marking Episode {confirmMarkPrevious.ep.episode_number} as watched, but there are {confirmMarkPrevious.previousUnwatched.length} previous unwatched episodes in this season. Would you like to mark them as watched too?</p>
@@ -698,89 +767,47 @@
         };
 
         const PlayerOverlay = () => {
-            const { selectedServerId, setSelectedServerId, iptvDomain, iptvUser, iptvPass, iptvCache, activePlayerMedia, setActivePlayerMedia } = React.useContext(AppContext);
+            const { selectedServerId, setSelectedServerId, servers, activePlayerMedia, setActivePlayerMedia } = React.useContext(AppContext);
             const [showSettings, setShowSettings] = useState(false);
             const [showCastGuide, setShowCastGuide] = useState(false);
             const [copied, setCopied] = useState(false);
-            const [iptvStreamId, setIptvStreamId] = useState('');
-            const [autoSearchStatus, setAutoSearchStatus] = useState('idle'); 
-            const [streamStatus, setStreamStatus] = useState('checking'); 
             const videoRef = useRef(null);
 
             if (!activePlayerMedia) return null;
-            const isIptv = selectedServerId === 'iptv';
-
-            useEffect(() => {
-                setIptvStreamId('');
-                setAutoSearchStatus('idle');
-            }, [activePlayerMedia]);
-
-            useEffect(() => {
-                if (!isIptv || !iptvCache.loaded || iptvStreamId || !activePlayerMedia) return;
-                const normalize = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                const targetName = normalize(activePlayerMedia.title);
-                setAutoSearchStatus('searching');
-
-                if (activePlayerMedia.type === 'movie') {
-                    const match = iptvCache.vod.find(item => normalize(item.name) === targetName) || iptvCache.vod.find(item => normalize(item.name).includes(targetName));
-                    if (match) { setIptvStreamId(`${match.stream_id}.${match.container_extension || 'mp4'}`); setAutoSearchStatus('found'); } else { setAutoSearchStatus('not_found'); }
-                } else if (activePlayerMedia.type === 'tv') {
-                    const match = iptvCache.series.find(item => normalize(item.name) === targetName) || iptvCache.series.find(item => normalize(item.name).includes(targetName));
-                    if (match) {
-                        const cleanDomain = iptvDomain.replace(/\/$/, '');
-                        const url = `${cleanDomain}/player_api.php?username=${iptvUser}&password=${iptvPass}&action=get_series_info&series_id=${match.series_id}`;
-                        const fetchSeriesInfo = async () => {
-                            try {
-                                let data = null;
-                                const proxies = ['', 'https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?'];
-                                for (const proxy of proxies) {
-                                    try {
-                                        const fetchUrl = proxy ? `${proxy}${encodeURIComponent(url)}` : url;
-                                        const res = await fetch(fetchUrl, { cache: 'no-store' });
-                                        if (res.ok) { data = await res.json(); break; }
-                                    } catch (e) { continue; }
-                                }
-                                if (!data) throw new Error();
-                                const seasonData = data?.episodes?.[activePlayerMedia.season];
-                                if (seasonData && Array.isArray(seasonData)) {
-                                    const ep = seasonData.find(e => parseInt(e.episode_num) === parseInt(activePlayerMedia.episode));
-                                    if (ep && ep.id) { setIptvStreamId(`${ep.id}.${ep.container_extension || 'mp4'}`); setAutoSearchStatus('found'); return; }
-                                }
-                                setAutoSearchStatus('not_found');
-                            } catch (err) { setAutoSearchStatus('not_found'); }
-                        };
-                        fetchSeriesInfo();
-                    } else { setAutoSearchStatus('not_found'); }
-                }
-            }, [selectedServerId, iptvCache.loaded, activePlayerMedia, iptvStreamId, isIptv, iptvDomain, iptvPass, iptvUser]);
 
             const activeUrl = useMemo(() => {
-                if (isIptv) {
-                    if (!iptvStreamId || !iptvDomain || !iptvUser || !iptvPass) return '';
-                    const typePath = activePlayerMedia.type === 'tv' ? 'series' : 'movie';
-                    let streamPath = String(iptvStreamId);
-                    if (!streamPath.includes('.')) streamPath += '.mp4';
-                    return `${iptvDomain.replace(/\/$/, '')}/${typePath}/${iptvUser}/${iptvPass}/${streamPath}`;
+                const server = servers.find(s => s.id === selectedServerId) || servers[0];
+                if (server) {
+                    if (server.id === 'iptv') {
+                        // Let the IPTV stream hook logic take over (or configure manually later)
+                        return 'iptv_placeholder'; 
+                    }
+
+                    let formattedUrl = server.urlTemplate
+                        .replace(/\{type\}/g, activePlayerMedia.type)
+                        .replace(/\{tmdb\}/g, activePlayerMedia.tmdbId)
+                        .replace(/\{imdb\}/g, activePlayerMedia.imdbId || activePlayerMedia.tmdbId);
+                        
+                    if (activePlayerMedia.type === 'tv' || activePlayerMedia.type === 'series') {
+                        return formattedUrl.replace(/\{s\}/g, activePlayerMedia.season || '').replace(/\{e\}/g, activePlayerMedia.episode || '');
+                    } else {
+                        // Cleanly remove the season/episode placeholders from the URL if it's just a movie
+                        return formattedUrl
+                            .replace(/\/\{s\}\/\{e\}/g, '')
+                            .replace(/[?&](s|season)=\{s\}&(e|episode)=\{e\}/g, '')
+                            .replace(/-\{s\}-\{e\}/g, '')
+                            .replace(/\{s\}/g, '')
+                            .replace(/\{e\}/g, '')
+                            .replace(/[?&]$/, '');
+                    }
                 }
-                const server = SERVERS.find(s => s.id === selectedServerId) || SERVERS[0];
-                return server.getUrl(activePlayerMedia.type, activePlayerMedia.tmdbId, activePlayerMedia.imdbId, activePlayerMedia.season, activePlayerMedia.episode);
-            }, [activePlayerMedia, selectedServerId, isIptv, iptvStreamId, iptvDomain, iptvUser, iptvPass]);
+                return '';
+            }, [activePlayerMedia, selectedServerId, servers]);
+
+            const isRawFile = activeUrl.includes('.mp4') || activeUrl.includes('.mkv') || activeUrl.includes('.m3u8');
 
             useEffect(() => {
-                if (activeUrl && isIptv && iptvStreamId) {
-                    setStreamStatus('checking');
-                    const controller = new AbortController();
-                    fetch(activeUrl, { method: 'HEAD', mode: 'no-cors', cache: 'no-cache', signal: controller.signal })
-                        .then(() => setStreamStatus('online')).catch(() => setStreamStatus('offline'));
-                    setTimeout(() => controller.abort(), 5000);
-                    return () => controller.abort();
-                } else if (activeUrl && !isIptv) {
-                    setStreamStatus('online'); 
-                }
-            }, [activeUrl, isIptv, iptvStreamId]);
-
-            useEffect(() => {
-                if (!activeUrl || !isIptv || streamStatus !== 'online') return;
+                if (!activeUrl || !isRawFile) return;
                 const video = videoRef.current;
                 if (!video) return;
                 let hlsInstance = null;
@@ -794,7 +821,7 @@
                     }
                 } else { video.src = activeUrl; video.play().catch(e=>e); }
                 return () => { if (hlsInstance) hlsInstance.destroy(); if (video) { video.pause(); video.removeAttribute('src'); video.load(); } };
-            }, [activeUrl, isIptv, streamStatus]);
+            }, [activeUrl, isRawFile]);
 
             return (
                 <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in">
@@ -813,7 +840,7 @@
                                         <div className="p-3">
                                             <div className="text-[10px] uppercase text-gray-500 mb-2 font-bold px-1">Change Server</div>
                                             <div className="flex flex-col gap-1 max-h-48 overflow-y-auto hide-scrollbar">
-                                                {SERVERS.map(s => <button key={s.id} onClick={() => { setSelectedServerId(s.id); setShowSettings(false); }} className={`flex items-center justify-between px-3 py-2 text-xs font-bold rounded-lg ${selectedServerId === s.id ? 'bg-indigo-600/20 text-indigo-400' : 'text-gray-300 hover:bg-neutral-800 hover:text-white'}`}>{s.name} {selectedServerId === s.id && <Check size={14} />}</button>)}
+                                                {servers.map(s => <button key={s.id} onClick={() => { setSelectedServerId(s.id); setShowSettings(false); }} className={`flex items-center justify-between px-3 py-2 text-xs font-bold rounded-lg ${selectedServerId === s.id ? 'bg-indigo-600/20 text-indigo-400' : 'text-gray-300 hover:bg-neutral-800 hover:text-white'}`}>{s.name} {selectedServerId === s.id && <Check size={14} />}</button>)}
                                             </div>
                                         </div>
                                     </div>
@@ -823,26 +850,13 @@
                     </div>
 
                     <div className="flex-grow flex flex-col items-center justify-center bg-black pt-14 pb-4 px-0 sm:px-4 overflow-y-auto relative z-10">
-                        {isIptv && !activeUrl ? (
-                            <div className="absolute inset-0 bg-[#0f0f0f] flex flex-col items-center justify-center p-6 text-center z-20">
-                                <Server size={48} className="text-indigo-500 mb-4" />
-                                <h3 className="text-xl font-bold mb-2 text-white">IPTV Stream Connection</h3>
-                                {!iptvCache.loaded && !iptvCache.error && <div className="text-indigo-400 mb-4 flex items-center gap-2 animate-pulse text-sm"><Database size={16} className="animate-spin" /> Loading IPTV Database...</div>}
-                                {autoSearchStatus === 'searching' && <div className="text-amber-400 mb-4 flex items-center gap-2 animate-pulse text-sm"><Search size={16} /> Auto-searching for "{activePlayerMedia.title}"...</div>}
-                                {iptvCache.error && <div className="text-red-400 mb-4 text-xs max-w-md bg-red-900/20 p-2 rounded border border-red-500/20">{iptvCache.error}</div>}
-                                {autoSearchStatus === 'not_found' && <div className="text-amber-400 mb-4 text-sm max-w-md bg-amber-900/20 p-3 rounded">Could not automatically match "{activePlayerMedia.title}" in your IPTV list.</div>}
-                                <p className="text-sm text-gray-400 max-w-md mb-6 leading-relaxed">Please manually enter the numeric Stream ID below.</p>
-                                <div className="flex flex-col gap-3 w-full max-w-xs">
-                                    <input type="text" placeholder="Stream ID (e.g. 12345.mp4)" value={iptvStreamId} onChange={e => setIptvStreamId(e.target.value)} className="bg-neutral-800 border border-neutral-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500 text-center font-mono" />
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="w-full aspect-video max-h-[75vh] max-w-6xl mx-auto rounded-lg overflow-hidden shadow-2xl relative">
-                                {isIptv && streamStatus === 'checking' && <div className="absolute inset-0 bg-neutral-900 flex flex-col items-center justify-center z-20"><Database size={32} className="text-indigo-500 animate-spin mb-4" /><p className="text-white font-bold">Pinging Stream Connection...</p></div>}
-                                {isIptv && streamStatus === 'offline' && <div className="absolute inset-0 bg-neutral-900 flex flex-col items-center justify-center z-20 p-6 text-center"><AlertCircle size={48} className="text-red-500 mb-4" /><h3 className="text-xl font-bold text-white mb-2">Stream Unreachable</h3><p className="text-sm text-gray-400 max-w-md mb-4">The browser blocked the connection, or the ID is invalid. Try opening in a new tab.</p><a href={activeUrl} target="_blank" className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold">Open Stream in New Tab</a></div>}
-                                {isIptv ? <video ref={videoRef} className={`absolute inset-0 w-full h-full bg-black ${streamStatus === 'online' ? 'opacity-100' : 'opacity-0'}`} controls autoPlay playsInline /> : <iframe src={activeUrl} className={`absolute inset-0 w-full h-full border-0 ${streamStatus === 'online' ? 'opacity-100' : 'opacity-0'}`} allowFullScreen allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>}
-                            </div>
-                        )}
+                        <div className="w-full aspect-video max-h-[75vh] max-w-6xl mx-auto rounded-lg overflow-hidden shadow-2xl relative">
+                            {isRawFile ? (
+                                <video ref={videoRef} className="absolute inset-0 w-full h-full bg-black" controls autoPlay playsInline />
+                            ) : (
+                                <iframe src={activeUrl} className="absolute inset-0 w-full h-full border-0" allowFullScreen allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>
+                            )}
+                        </div>
 
                         <div className="w-full max-w-6xl mx-auto mt-4 px-4 sm:px-0">
                             <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 p-2 sm:px-4 sm:py-3 rounded-lg shadow-lg">
@@ -1009,15 +1023,18 @@
         const ProfileView = () => {
             const { 
                 historyList, setHistoryList, customLists, setCustomLists, favorites, openDetails, 
-                hideAdult, setHideAdult, iptvDomain, setIptvDomain, iptvUser, setIptvUser, iptvPass, setIptvPass, iptvCache, 
+                hideAdult, setHideAdult, selectedServerId, setSelectedServerId,
+                servers, setServers, 
                 tmdbKey, setTmdbKey, setWatchedEpisodes, launchPlayer, notifications, loadingNotifications 
             } = React.useContext(AppContext);
 
             const [activeProfileTab, setActiveProfileTab] = useState('watchlist');
             const [newListMode, setNewListMode] = useState(false);
             const [newListName, setNewListName] = useState('');
-            const [testState, setTestState] = useState({ loading: false, result: null, isError: false });
             const [showNotif, setShowNotif] = useState(false);
+            
+            const [customServerName, setCustomServerName] = useState('');
+            const [customServerUrl, setCustomServerUrl] = useState('');
 
             const stats = useMemo(() => {
                 let totalMinutes = 0;
@@ -1034,22 +1051,6 @@
                 return { totalHours, totalDays, typeCount, topGenres };
             }, [historyList]);
 
-            const handleTestConnection = async () => {
-                if (!iptvDomain || !iptvUser || !iptvPass) { setTestState({ loading: false, result: 'Please fill in all credentials.', isError: true }); return; }
-                setTestState({ loading: true, result: null, isError: false });
-                try {
-                    const url = `${iptvDomain.replace(/\/$/, '')}/player_api.php?username=${iptvUser}&password=${iptvPass}`;
-                    const res = await fetch(url, { mode: 'cors', headers: { 'Accept': 'application/json' } });
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.user_info?.auth === 1) setTestState({ loading: false, result: `✅ Connected! Status: ${data.user_info.status}`, isError: false });
-                        else setTestState({ loading: false, result: '❌ Invalid Username or Password.', isError: true });
-                    } else throw new Error();
-                } catch(e) {
-                    setTestState({ loading: false, result: '❌ Network/CORS Error. Ensure domain is correct.', isError: true });
-                }
-            };
-
             const handleShareList = (list) => {
                 const text = `Check out my list "${list.name}" on Universal Index Player:\n\n` + list.items.map((i, idx) => `${idx + 1}. ${i.Title} (${i.Type})`).join('\n');
                 try {
@@ -1061,6 +1062,36 @@
             const createCustomList = (name) => {
                 if (!name.trim()) return;
                 setCustomLists(prev => [...prev, { id: Date.now().toString(), name, items: [] }]);
+            };
+
+            const handleAddServer = () => {
+                if (!customServerName.trim() || !customServerUrl.trim()) return;
+                
+                let finalTemplate = customServerUrl.trim();
+                // Auto-format the URL if the user just provided a domain/link
+                if (!finalTemplate.includes('{tmdb}') && !finalTemplate.includes('{imdb}')) {
+                    const domain = finalTemplate.replace(/^(https?:\/\/)/, '').replace(/\/$/, '');
+                    finalTemplate = `https://${domain}/embed/{type}/{tmdb}/{s}/{e}`;
+                }
+
+                setServers(prev => [...prev, { id: 'server_' + Date.now(), name: customServerName, urlTemplate: finalTemplate }]);
+                setCustomServerName('');
+                setCustomServerUrl('');
+            };
+
+            const handleRemoveServer = (id) => {
+                setServers(prev => {
+                    const remaining = prev.filter(s => s.id !== id);
+                    if (selectedServerId === id) {
+                        setSelectedServerId(remaining.length > 0 ? remaining[0].id : '');
+                    }
+                    return remaining;
+                });
+            };
+
+            const handleResetServers = () => {
+                setServers(DEFAULT_SERVERS);
+                setSelectedServerId(DEFAULT_SERVERS[0].id);
             };
 
             return (
@@ -1239,19 +1270,41 @@
                                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hideAdult ? 'translate-x-6' : 'translate-x-1'}`} />
                                     </button>
                                 </div>
+
                                 <div className="bg-[#181818] p-4 rounded-xl border border-gray-800">
-                                    <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2"><KeySquare size={18} className="text-indigo-400"/> IPTV Configuration</h2>
-                                    <div className="bg-amber-900/20 border border-amber-500/20 text-amber-400/90 text-xs p-3 rounded mb-4 flex gap-2">
-                                        <AlertCircle size={16} className="flex-shrink-0"/><p><strong>Important:</strong> HTTP IPTV requires local HTML file usage.</p>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h2 className="text-base font-bold text-white flex items-center gap-2"><Server size={18} className="text-indigo-400"/> Servers</h2>
+                                        <button onClick={handleResetServers} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold transition-colors">Reset to Default</button>
                                     </div>
-                                    <div className="space-y-3">
-                                        <input type="text" placeholder="Domain URL" value={iptvDomain} onChange={e => setIptvDomain(e.target.value)} className="w-full bg-[#2b2b2b] px-3 py-2 rounded outline-none" />
-                                        <input type="text" placeholder="Username" value={iptvUser} onChange={e => setIptvUser(e.target.value)} className="w-full bg-[#2b2b2b] px-3 py-2 rounded outline-none" />
-                                        <input type="password" placeholder="Password" value={iptvPass} onChange={e => setIptvPass(e.target.value)} className="w-full bg-[#2b2b2b] px-3 py-2 rounded outline-none" />
+                                    
+                                    <div className="space-y-3 mb-4">
+                                        <input type="text" placeholder="Server Name (e.g. StreamIMDb)" value={customServerName} onChange={e => setCustomServerName(e.target.value)} className="w-full bg-[#2b2b2b] px-3 py-2 rounded outline-none text-sm" />
+                                        <input type="text" placeholder="Server Link (e.g. streamimdb.ru)" value={customServerUrl} onChange={e => setCustomServerUrl(e.target.value)} className="w-full bg-[#2b2b2b] px-3 py-2 rounded outline-none text-sm font-mono" />
+                                        <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">
+                                            Just enter the domain link (e.g. <span className="font-mono text-indigo-400">streamimdb.ru</span>) and the app will do the rest!<br/>
+                                            Or, use advanced placeholders: <code className="text-indigo-400">{'{tmdb}'}</code>, <code className="text-indigo-400">{'{type}'}</code>, <code className="text-indigo-400">{'{s}'}</code>, <code className="text-indigo-400">{'{e}'}</code>.
+                                        </p>
+                                        <button onClick={handleAddServer} className="w-full bg-indigo-600 hover:bg-indigo-500 py-2 rounded font-bold text-sm transition-colors mt-2">Add Server</button>
                                     </div>
-                                    <button onClick={handleTestConnection} className="w-full mt-4 bg-indigo-600 py-2 rounded font-bold text-sm">Test Connection</button>
-                                    {testState.result && <div className={`mt-2 p-2 rounded text-xs ${testState.isError ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>{testState.result}</div>}
+                                    
+                                    {servers.length > 0 && (
+                                        <div className="mt-4 space-y-2 border-t border-gray-800 pt-4">
+                                            <h3 className="text-xs font-bold text-gray-400 uppercase">Saved Servers</h3>
+                                            {servers.map(server => (
+                                                <div key={server.id} className="flex justify-between items-center bg-[#2b2b2b] p-2 rounded">
+                                                    <div className="flex flex-col overflow-hidden mr-2">
+                                                        <span className="text-sm font-bold text-white truncate">{server.name}</span>
+                                                        <span className="text-[10px] text-gray-400 truncate font-mono">{server.urlTemplate}</span>
+                                                    </div>
+                                                    <button onClick={() => handleRemoveServer(server.id)} className="p-1.5 bg-red-900/40 hover:bg-red-600 text-red-500 hover:text-white rounded transition-colors flex-shrink-0">
+                                                        <Trash2 size={14}/>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
+
                                 <div className="bg-[#181818] p-4 rounded-xl border border-gray-800">
                                     <label className="text-sm font-bold text-gray-400 mb-2 block">TMDB API Key</label>
                                     <input type="text" value={tmdbKey} onChange={e => setTmdbKey(e.target.value)} className="w-full bg-[#2b2b2b] px-3 py-2 rounded outline-none" />
@@ -1269,10 +1322,22 @@
             const [tmdbKey, setTmdbKey] = useState(() => localStorage.getItem('vaTmdbKey') || '15d2ea6d0dc1d476efbca3eba2b9bbfb');
             const [selectedServerId, setSelectedServerId] = useState(() => localStorage.getItem('vaServer') || 'streamimdb');
             const [dbLanguage, setDbLanguage] = useState(() => localStorage.getItem('vaLanguage') || 'en-US');
-            const [iptvDomain, setIptvDomain] = useState(() => localStorage.getItem('vaIptvDomain') || 'http://hydraa.st:80');
-            const [iptvUser, setIptvUser] = useState(() => localStorage.getItem('vaIptvUser') || 'haithemb');
-            const [iptvPass, setIptvPass] = useState(() => localStorage.getItem('vaIptvPass') || 'kse8328b');
-            const [iptvCache, setIptvCache] = useState({ vod: [], series: [], loaded: false, error: null });
+            const isRTL = dbLanguage === 'ar'; // Fix for ReferenceError
+            
+            const [servers, setServers] = useState(() => { 
+                try { 
+                    const saved = localStorage.getItem('vaServers');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        return parsed.length > 0 ? parsed : DEFAULT_SERVERS;
+                    }
+                    const legacyCustom = localStorage.getItem('vaCustomServers');
+                    if (legacyCustom) {
+                        return [...DEFAULT_SERVERS, ...JSON.parse(legacyCustom)];
+                    }
+                    return DEFAULT_SERVERS; 
+                } catch(e) { return DEFAULT_SERVERS; } 
+            });
 
             const [favorites, setFavorites] = useState(() => { try { return JSON.parse(localStorage.getItem('vaFavorites')) || []; } catch(e) { return []; } });
             const [historyList, setHistoryList] = useState(() => { try { return JSON.parse(localStorage.getItem('vaHistory')) || []; } catch(e) { return []; } });
@@ -1294,45 +1359,7 @@
             useEffect(() => localStorage.setItem('vaServer', selectedServerId), [selectedServerId]);
             useEffect(() => localStorage.setItem('vaTmdbKey', tmdbKey), [tmdbKey]);
             useEffect(() => localStorage.setItem('vaLanguage', dbLanguage), [dbLanguage]);
-            useEffect(() => localStorage.setItem('vaIptvDomain', iptvDomain), [iptvDomain]);
-            useEffect(() => localStorage.setItem('vaIptvUser', iptvUser), [iptvUser]);
-            useEffect(() => localStorage.setItem('vaIptvPass', iptvPass), [iptvPass]);
-
-            // IPTV Database Boot
-            useEffect(() => {
-                if (!iptvDomain || !iptvUser || !iptvPass) return;
-                let isMounted = true;
-                setIptvCache({ vod: [], series: [], loaded: false, error: null });
-                const fetchIptvData = async (targetUrl) => {
-                    const isSecureEnv = window.location.protocol === 'https:';
-                    const isHttpTarget = targetUrl.startsWith('http://');
-                    if (!isSecureEnv || !isHttpTarget) {
-                        try {
-                            const res = await fetch(targetUrl);
-                            if (res.ok) return await res.json();
-                        } catch(e) {}
-                    }
-                    const proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?'];
-                    for (const proxy of proxies) {
-                        try {
-                            const fetchUrl = `${proxy}${encodeURIComponent(targetUrl)}`;
-                            const res = await fetch(fetchUrl, { cache: 'no-store' });
-                            if (res.ok) return await res.json();
-                        } catch (e) { continue; }
-                    }
-                    throw new Error(isSecureEnv && isHttpTarget ? 'Canvas Blocked HTTP Request' : 'All connections failed');
-                };
-
-                const cleanDomain = iptvDomain.replace(/\/$/, '');
-                const baseUrl = `${cleanDomain}/player_api.php?username=${iptvUser}&password=${iptvPass}`;
-                Promise.all([fetchIptvData(`${baseUrl}&action=get_vod_streams`), fetchIptvData(`${baseUrl}&action=get_series`)])
-                .then(([vodData, seriesData]) => {
-                    if (isMounted) setIptvCache({ vod: Array.isArray(vodData) ? vodData : [], series: Array.isArray(seriesData) ? seriesData : [], loaded: true, error: null });
-                }).catch(err => {
-                    if (isMounted) setIptvCache({ vod: [], series: [], loaded: false, error: err.message === 'Canvas Blocked HTTP Request' ? "Canvas blocks HTTP IPTV. Please save file locally to test." : "Failed to load database. Provider may be blocking proxy." });
-                });
-                return () => { isMounted = false; };
-            }, [iptvDomain, iptvUser, iptvPass]);
+            useEffect(() => localStorage.setItem('vaServers', JSON.stringify(servers)), [servers]);
 
             // Notifications
             const [notifications, setNotifications] = useState([]);
@@ -1395,6 +1422,7 @@
             const openDetails = (media) => setSelectedMedia(media);
             const closeDetails = () => setSelectedMedia(null);
             
+            // Tracks which specific TV episodes you have finished
             const markEpisodeWatched = (tmdbId, seasonNum, epNum, isWatched = true) => {
                 setWatchedEpisodes(prev => {
                     const next = { ...prev };
@@ -1412,25 +1440,50 @@
                 });
             };
 
+            // Runs when you click "Play" on a TMDB Movie or TV Show
             const launchPlayer = (item, season = null, episode = null, epTitle = null, fullDetails = null) => {
                 const type = item.media_type || item.Type || (item.name ? 'tv' : 'movie');
+                
+                // 1. Open the Video Player Overlay
                 setActivePlayerMedia({
-                    tmdbId: item.id, imdbId: item.imdbID || item.external_ids?.imdb_id || fullDetails?.external_ids?.imdb_id,
-                    type: type === 'series' ? 'tv' : type, season, episode,
-                    title: item.title || item.name || item.Title, originalLanguage: item.original_language || item.OriginalLanguage
+                    tmdbId: item.id, 
+                    imdbId: item.imdbID || item.external_ids?.imdb_id || fullDetails?.external_ids?.imdb_id,
+                    type: type === 'series' ? 'tv' : type, 
+                    season, 
+                    episode,
+                    title: item.title || item.name || item.Title, 
+                    originalLanguage: item.original_language || item.OriginalLanguage
                 });
-                if (type === 'tv' || type === 'series') markEpisodeWatched(item.id, season, episode, true);
+
+                // 2. Mark episode as watched if it's a TV Show
+                if (type === 'tv' || type === 'series') {
+                    markEpisodeWatched(item.id, season, episode, true);
+                }
+
+                // 3. Create the History Record
                 const histId = `${item.id}-${season || '0'}-${episode || '0'}`;
                 const runtime = fullDetails?.runtime || (fullDetails?.episode_run_time?.[0]) || (type === 'movie' ? 120 : 45);
                 const genres = fullDetails?.genres?.map(g => g.id) || item.genre_ids || [];
 
                 const newRecord = {
-                    historyId: histId, id: item.id, imdbID: item.imdbID || item.external_ids?.imdb_id,
-                    Title: item.title || item.name || item.Title, Type: type,
+                    historyId: histId, 
+                    id: item.id, 
+                    imdbID: item.imdbID || item.external_ids?.imdb_id,
+                    Title: item.title || item.name || item.Title, 
+                    Type: type,
                     Poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : item.Poster,
                     backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : item.backdrop,
-                    season, episode, epTitle, timestamp: Date.now(), runtime, genres
+                    season, 
+                    episode, 
+                    epTitle, 
+                    timestamp: Date.now(), 
+                    runtime, 
+                    genres,
+                    source: item.source, // Preserve custom source tags
+                    icon: item.icon // Preserve custom icon tags
                 };
+
+                // 4. Save to History (Putting newest at the top, removing older duplicates, max 500 items)
                 setHistoryList(prev => [newRecord, ...prev.filter(h => h.historyId !== histId)].slice(0, 500));
                 closeDetails();
             };
@@ -1461,11 +1514,11 @@
 
             const contextValue = {
                 tmdbKey, setTmdbKey, dbLanguage, setDbLanguage, hideAdult, setHideAdult,
-                selectedServerId, setSelectedServerId, iptvDomain, setIptvDomain, iptvUser, setIptvUser, iptvPass, setIptvPass, iptvCache,
+                selectedServerId, setSelectedServerId, servers, setServers,
                 favorites, setFavorites, historyList, setHistoryList, watchedEpisodes, setWatchedEpisodes, customLists, setCustomLists,
                 activeTab, setActiveTab, seeAllConfig, setSeeAllConfig, selectedMedia, setSelectedMedia, activePlayerMedia, setActivePlayerMedia,
                 openDetails, closeDetails, launchPlayer, toggleFavorite, toggleItemInList, markEpisodeWatched,
-                notifications, loadingNotifications, favoriteGenre
+                notifications, loadingNotifications, favoriteGenre, isRTL
             };
 
             return (

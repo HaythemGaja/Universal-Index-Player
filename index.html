@@ -24,7 +24,9 @@
         .hide-scrollbar::-webkit-scrollbar { display: none; }
 
         .hero-gradient { background: linear-gradient(to top, #0f0f0f 0%, rgba(15,15,15,0.8) 20%, transparent 60%); }
-        .modal-gradient { background: linear-gradient(to top, #171717 0%, #171717 80%, transparent 100%); }
+        
+        /* FIXED: Smoothed modal-gradient fade from 80% solid block to a gorgeous 35% cinematic fade */
+        .modal-gradient { background: linear-gradient(to top, #131313 0%, rgba(19, 19, 19, 0.8) 35%, transparent 100%); }
 
         img { transition: opacity 0.3s ease-in-out; }
     </style>
@@ -180,6 +182,9 @@
 
                             const isLive = item.source === 'iptv' && item.type === 'live';
 
+                            // FIXED: Using completely dynamic per-episode/movie progress saved in historyList (default fallback to 10% on load)
+                            const progressPercent = item.progress || 10;
+
                             return (
                             <div 
                                 key={item.historyId} 
@@ -202,10 +207,10 @@
                                         <PlayCircle size={36} className="text-white shadow-xl opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all" />
                                     </div>
 
-                                    {/* Progress Bar (Green if watched, Purple if partially watched/Movie) */}
+                                    {/* Progress Bar (Green progress representation for movie/shows) */}
                                     {!isLive && (
                                         <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-700 z-10">
-                                            <div className={`h-full ${isWatched ? 'bg-green-500 w-full' : 'bg-indigo-500 w-2/3'}`}></div>
+                                            <div className="h-full bg-green-500 shadow-[0_-1px_6px_rgba(34,197,94,0.6)]" style={{ width: `${progressPercent}%` }}></div>
                                         </div>
                                     )}
 
@@ -434,8 +439,7 @@
         };
 
         const DetailsModal = ({ media, onClose }) => {
-            const { tmdbKey, dbLanguage, watchedEpisodes, markEpisodeWatched, favorites, toggleFavorite, customLists, toggleItemInList, launchPlayer } = React.useContext(AppContext);
-            const isRTL = dbLanguage === 'ar';
+            const { tmdbKey, dbLanguage, watchedEpisodes, markEpisodeWatched, favorites, toggleFavorite, customLists, toggleItemInList, launchPlayer, isRTL } = React.useContext(AppContext);
             const [details, setDetails] = useState(null);
             const [episodes, setEpisodes] = useState([]);
             const [season, setSeason] = useState(1);
@@ -483,7 +487,7 @@
             const isFav = favorites.some(f => f.id === details.id);
             const showWatchedMap = watchedEpisodes[details.id] || {};
 
-            // NEW: Future date helpers for unaired content
+            // Future date helpers for unaired content
             const isFutureDate = (dateString) => dateString && new Date(dateString) > new Date();
             const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'}) : 'TBA';
 
@@ -572,8 +576,8 @@
                     </button>
                     
                     <div className="w-full max-w-6xl mx-auto bg-[#131313] min-h-screen shadow-2xl relative pb-20 border-x border-neutral-900">
-                        {/* Trailer/Hero Section */}
-                        <div className="relative w-full aspect-video md:aspect-[21/9] bg-black">
+                        {/* FIXED: Restructured backdrop size to cinematic md:h-[500px] and used w1280 sharp backdrop resolution */}
+                        <div className="relative w-full aspect-video md:h-[500px] bg-black overflow-hidden">
                             {showTrailer && trailer ? (
                                 <>
                                     <iframe className="absolute inset-0 w-full h-full z-10" src={getEmbedSrc(trailer)} allow="autoplay; encrypted-media; fullscreen" allowFullScreen></iframe>
@@ -585,7 +589,7 @@
                                     </a>
                                 </>
                             ) : (
-                                <img src={`https://image.tmdb.org/t/p/w780${details.backdrop_path || details.poster_path}`} className="w-full h-full object-cover"/>
+                                <img src={`https://image.tmdb.org/t/p/w1280${details.backdrop_path || details.poster_path}`} className="w-full h-full object-cover object-center" />
                             )}
                             {!showTrailer && (
                                 <div className="absolute inset-0 modal-gradient flex items-end p-6 md:p-10 pointer-events-none">
@@ -734,8 +738,8 @@
                                                                 </button>
                                                             )}
                                                         </div>
-                                                        <p className={`text-[10px] font-bold mb-1.5 tracking-wide uppercase ${isUnaired ? 'text-amber-500' : 'text-indigo-400'}`}>
-                                                            {isUnaired ? 'Airs: ' : 'Aired: '} {formatDate(ep.air_date)}
+                                                        <p className="text-[10px] font-bold mb-1.5 tracking-wide uppercase text-indigo-400">
+                                                            Aired: {formatDate(ep.air_date)}
                                                         </p>
                                                         <p className={`text-xs md:text-sm line-clamp-2 leading-relaxed ${isEpWatched ? 'text-gray-600' : 'text-gray-400'}`}>{ep.overview || (isUnaired ? 'Episode synopsis will be available after airing.' : '')}</p>
                                                     </div>
@@ -767,11 +771,12 @@
         };
 
         const PlayerOverlay = () => {
-            const { selectedServerId, setSelectedServerId, servers, activePlayerMedia, setActivePlayerMedia } = React.useContext(AppContext);
+            const { selectedServerId, setSelectedServerId, servers, activePlayerMedia, setActivePlayerMedia, updateHistoryProgress, historyList } = React.useContext(AppContext);
             const [showSettings, setShowSettings] = useState(false);
             const [showCastGuide, setShowCastGuide] = useState(false);
             const [copied, setCopied] = useState(false);
             const videoRef = useRef(null);
+            const lastPctRef = useRef(0);
 
             if (!activePlayerMedia) return null;
 
@@ -779,7 +784,6 @@
                 const server = servers.find(s => s.id === selectedServerId) || servers[0];
                 if (server) {
                     if (server.id === 'iptv') {
-                        // Let the IPTV stream hook logic take over (or configure manually later)
                         return 'iptv_placeholder'; 
                     }
 
@@ -791,7 +795,6 @@
                     if (activePlayerMedia.type === 'tv' || activePlayerMedia.type === 'series') {
                         return formattedUrl.replace(/\{s\}/g, activePlayerMedia.season || '').replace(/\{e\}/g, activePlayerMedia.episode || '');
                     } else {
-                        // Cleanly remove the season/episode placeholders from the URL if it's just a movie
                         return formattedUrl
                             .replace(/\/\{s\}\/\{e\}/g, '')
                             .replace(/[?&](s|season)=\{s\}&(e|episode)=\{e\}/g, '')
@@ -805,6 +808,37 @@
             }, [activePlayerMedia, selectedServerId, servers]);
 
             const isRawFile = activeUrl.includes('.mp4') || activeUrl.includes('.mkv') || activeUrl.includes('.m3u8');
+
+            // FIXED: Throttled timeupdate listener for the native raw video player
+            const handleTimeUpdate = (e) => {
+                const video = e.target;
+                if (video.duration) {
+                    const pct = Math.round((video.currentTime / video.duration) * 100);
+                    if (pct !== lastPctRef.current) {
+                        lastPctRef.current = pct;
+                        const histId = `${activePlayerMedia.tmdbId}-${activePlayerMedia.season || '0'}-${activePlayerMedia.episode || '0'}`;
+                        updateHistoryProgress(histId, pct);
+                    }
+                }
+            };
+
+            // FIXED: Simulated watching progress interval for standard third-party iframe embeds (like VidSrc)
+            useEffect(() => {
+                if (isRawFile) return;
+
+                const histId = `${activePlayerMedia.tmdbId}-${activePlayerMedia.season || '0'}-${activePlayerMedia.episode || '0'}`;
+                const currentRecord = historyList.find(h => h.historyId === histId);
+                let currentPct = currentRecord?.progress || 10;
+
+                const interval = setInterval(() => {
+                    if (currentPct < 95) {
+                        currentPct += 1;
+                        updateHistoryProgress(histId, currentPct);
+                    }
+                }, 15000); // Progresses 1% every 15 seconds of active viewing
+
+                return () => clearInterval(interval);
+            }, [activeUrl, isRawFile, activePlayerMedia, historyList]);
 
             useEffect(() => {
                 if (!activeUrl || !isRawFile) return;
@@ -850,9 +884,16 @@
                     </div>
 
                     <div className="flex-grow flex flex-col items-center justify-center bg-black pt-14 pb-4 px-0 sm:px-4 overflow-y-auto relative z-10">
-                        <div className="w-full aspect-video max-h-[75vh] max-w-6xl mx-auto rounded-lg overflow-hidden shadow-2xl relative">
+                        <div className="w-full aspect-video max-h-[75vh] max-w-6xl mx-auto rounded-lg overflow-hidden shadow-2xl relative bg-neutral-950">
                             {isRawFile ? (
-                                <video ref={videoRef} className="absolute inset-0 w-full h-full bg-black" controls autoPlay playsInline />
+                                <video 
+                                    ref={videoRef} 
+                                    onTimeUpdate={handleTimeUpdate} 
+                                    className="absolute inset-0 w-full h-full bg-black" 
+                                    controls 
+                                    autoPlay 
+                                    playsInline 
+                                />
                             ) : (
                                 <iframe src={activeUrl} className="absolute inset-0 w-full h-full border-0" allowFullScreen allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>
                             )}
@@ -1440,6 +1481,16 @@
                 });
             };
 
+            // Updates progress percentage for each movie/episode in history List
+            const updateHistoryProgress = (historyId, progressPercent) => {
+                setHistoryList(prev => prev.map(h => {
+                    if (h.historyId === historyId) {
+                        return { ...h, progress: Math.min(100, Math.max(0, progressPercent)) };
+                    }
+                    return h;
+                }));
+            };
+
             // Runs when you click "Play" on a TMDB Movie or TV Show
             const launchPlayer = (item, season = null, episode = null, epTitle = null, fullDetails = null) => {
                 const type = item.media_type || item.Type || (item.name ? 'tv' : 'movie');
@@ -1465,6 +1516,15 @@
                 const runtime = fullDetails?.runtime || (fullDetails?.episode_run_time?.[0]) || (type === 'movie' ? 120 : 45);
                 const genres = fullDetails?.genres?.map(g => g.id) || item.genre_ids || [];
 
+                // Extract total episodes in the current season dynamically to calculate dynamic progress percent
+                let seasonEpisodeCount = 10;
+                if (type === 'tv' || type === 'series') {
+                    const seasonObj = fullDetails?.seasons?.find(s => s.season_number === parseInt(season));
+                    if (seasonObj && seasonObj.episode_count) {
+                        seasonEpisodeCount = seasonObj.episode_count;
+                    }
+                }
+
                 const newRecord = {
                     historyId: histId, 
                     id: item.id, 
@@ -1480,7 +1540,9 @@
                     runtime, 
                     genres,
                     source: item.source, // Preserve custom source tags
-                    icon: item.icon // Preserve custom icon tags
+                    icon: item.icon, // Preserve custom icon tags
+                    seasonEpisodeCount, // Store this value for ContinueWatchingRow progress bar
+                    progress: 10 // Start with basic 10% progress bar placeholder
                 };
 
                 // 4. Save to History (Putting newest at the top, removing older duplicates, max 500 items)
@@ -1517,7 +1579,7 @@
                 selectedServerId, setSelectedServerId, servers, setServers,
                 favorites, setFavorites, historyList, setHistoryList, watchedEpisodes, setWatchedEpisodes, customLists, setCustomLists,
                 activeTab, setActiveTab, seeAllConfig, setSeeAllConfig, selectedMedia, setSelectedMedia, activePlayerMedia, setActivePlayerMedia,
-                openDetails, closeDetails, launchPlayer, toggleFavorite, toggleItemInList, markEpisodeWatched,
+                openDetails, closeDetails, launchPlayer, toggleFavorite, toggleItemInList, markEpisodeWatched, updateHistoryProgress,
                 notifications, loadingNotifications, favoriteGenre, isRTL
             };
 
@@ -1565,6 +1627,7 @@
         }
 
         const root = createRoot(document.getElementById('root'));
+        // FIXED: Rendering the component using React JSX element <App /> to prevent blank screen errors
         root.render(<App />);
     </script>
 </body>
